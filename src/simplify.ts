@@ -1,38 +1,24 @@
-// Edge-preserving luminance simplification with two interchangeable engines.
+// Edge-preserving luminance simplification — He et al.'s self-guided filter.
 //
-// Goal (both engines): flatten "flat + noise" areas (grain, compression mush)
-// into clean surfaces while keeping strong edges and gradients at full contrast,
-// so the luminance condenses into the few values that actually carry shape.
+// Goal: flatten "flat + noise" areas (grain, compression mush) into clean
+// surfaces while keeping strong edges and gradients at full contrast, so the
+// luminance condenses into the few values that actually carry shape.
 //
-// - bilateral — iterated separable bilateral filter. Each pixel averages
-//   neighbors whose luminance is within a tolerance (the range gaussian). Very
-//   powerful and controllable, but the separable approximation + piecewise-flat
-//   result can leave stair-stepped, aliased seams on diagonal edges.
-// - guided — He et al.'s self-guided filter. Output per window is a*I + b with
-//   a = var/(var + eps): low-variance areas collapse toward their local mean,
-//   edges pass through. Smooth by construction (little to no aliasing) and O(n)
-//   regardless of radius.
-//
-// Either result can be run through a light anti-alias pass (a small NaN-aware
-// gaussian, blended by `antiAlias`) to round the residual jaggies. Neighborhood
-// indexing wraps toroidally so tileable textures stay seamless.
-
-export type SimplifyMethod = 'bilateral' | 'guided'
+// Output per window is a*I + b with a = var/(var + eps): low-variance areas
+// collapse toward their local mean while edges pass through. Smooth by
+// construction (little to no aliasing) and O(n) regardless of radius.
+// Neighborhood indexing wraps toroidally so tileable textures stay seamless.
 
 export interface SimplifyOptions {
-  /** Which engine to run. */
-  method: SimplifyMethod
-  /** 0..100. 0 bypasses the filter. Maps to the range tolerance (bilateral) / eps (guided). */
+  /** Master on/off — when false the raw luminance passes through untouched (for A/B). */
+  enabled: boolean
+  /** 0..100. 0 bypasses the filter. Maps to the guided filter's eps. */
   strength: number
   /** Spatial kernel half-width in pixels. */
   radius: number
   /** Filter iterations. More passes flatten low-variation areas further. */
   passes: number
-  /** 0..1 amount of post-filter anti-aliasing applied to the simplified result. */
-  antiAlias: number
 }
-
-const RANGE_BINS = 4096
 
 export function simplifyLuminance(
   src: Float32Array,
@@ -40,125 +26,19 @@ export function simplifyLuminance(
   height: number,
   opts: SimplifyOptions,
 ): Float32Array {
-  const { method, strength, radius, passes, antiAlias } = opts
-  if (strength <= 0 || passes <= 0) return src.slice()
+  const { enabled, strength, radius, passes } = opts
+  if (!enabled || strength <= 0 || passes <= 0) return src.slice()
 
-  const simplified =
-    method === 'guided'
-      ? guidedSimplify(src, width, height, strength, radius, passes)
-      : bilateralSimplify(src, width, height, strength, radius, passes)
-
-  return antiAlias > 0 ? antiAliasPass(simplified, width, height, antiAlias) : simplified
+  return guidedSimplify(src, width, height, strength, radius, passes)
 }
 
 /**
- * Shared luminance-difference tolerance both engines are calibrated to, so equal
- * `strength` means "smooth variations up to this magnitude" in either one — and
- * an A/B swap shows only the difference in *character*, not in amount. The
- * bilateral uses it directly as the range sigma; the guided filter uses it as
- * sqrt(eps) (the local-std threshold below which a region collapses to its mean).
+ * Maps `strength` to the guided filter's eps as eps = tol²: `tol` is the local-std
+ * threshold below which a region collapses to its mean. The ^1.5 curve gives finer
+ * control at low strength.
  */
 function toleranceFromStrength(strength: number): number {
   return 0.3 * Math.pow(strength / 100, 1.5)
-}
-
-// --- Bilateral (iterated, separable) ---
-
-function bilateralSimplify(
-  src: Float32Array,
-  width: number,
-  height: number,
-  strength: number,
-  radius: number,
-  passes: number,
-): Float32Array {
-  const r = Math.max(1, Math.min(Math.round(radius), Math.min(width, height) - 1))
-  const sigmaR = Math.max(0.002, toleranceFromStrength(strength))
-  // Gaussian sigma whose variance matches a box of half-width r (the guided
-  // filter's window), so both engines reach about as far spatially per radius.
-  const sigmaS = Math.max(0.5, r / Math.sqrt(3))
-
-  const spatial = new Float32Array(2 * r + 1)
-  for (let k = -r; k <= r; k++) spatial[k + r] = Math.exp(-(k * k) / (2 * sigmaS * sigmaS))
-
-  const rangeLut = new Float32Array(RANGE_BINS)
-  const invTwoSigmaR2 = 1 / (2 * sigmaR * sigmaR)
-  for (let i = 0; i < RANGE_BINS; i++) {
-    const d = i / (RANGE_BINS - 1)
-    rangeLut[i] = Math.exp(-d * d * invTwoSigmaR2)
-  }
-
-  const n = width * height
-  const valid = new Uint8Array(n)
-  for (let i = 0; i < n; i++) valid[i] = Number.isNaN(src[i]) ? 0 : 1
-
-  const current = src.slice()
-  const buffer = new Float32Array(n)
-
-  const horizontalPass = (input: Float32Array, output: Float32Array) => {
-    for (let y = 0; y < height; y++) {
-      const row = y * width
-      for (let x = 0; x < width; x++) {
-        const idx = row + x
-        if (!valid[idx]) {
-          output[idx] = NaN
-          continue
-        }
-        const center = input[idx]
-        let sum = 0
-        let weightSum = 0
-        for (let k = -r; k <= r; k++) {
-          let nx = x + k
-          if (nx < 0) nx += width
-          else if (nx >= width) nx -= width
-          const nIdx = row + nx
-          if (!valid[nIdx]) continue
-          const v = input[nIdx]
-          const diff = v > center ? v - center : center - v
-          const w = spatial[k + r] * rangeLut[(diff * (RANGE_BINS - 1)) | 0]
-          sum += v * w
-          weightSum += w
-        }
-        output[idx] = weightSum > 0 ? sum / weightSum : center
-      }
-    }
-  }
-
-  const verticalPass = (input: Float32Array, output: Float32Array) => {
-    for (let y = 0; y < height; y++) {
-      const row = y * width
-      for (let x = 0; x < width; x++) {
-        const idx = row + x
-        if (!valid[idx]) {
-          output[idx] = NaN
-          continue
-        }
-        const center = input[idx]
-        let sum = 0
-        let weightSum = 0
-        for (let k = -r; k <= r; k++) {
-          let ny = y + k
-          if (ny < 0) ny += height
-          else if (ny >= height) ny -= height
-          const nIdx = ny * width + x
-          if (!valid[nIdx]) continue
-          const v = input[nIdx]
-          const diff = v > center ? v - center : center - v
-          const w = spatial[k + r] * rangeLut[(diff * (RANGE_BINS - 1)) | 0]
-          sum += v * w
-          weightSum += w
-        }
-        output[idx] = weightSum > 0 ? sum / weightSum : center
-      }
-    }
-  }
-
-  for (let pass = 0; pass < passes; pass++) {
-    horizontalPass(current, buffer)
-    verticalPass(buffer, current)
-  }
-
-  return current
 }
 
 // --- Guided (He et al., self-guided) ---
@@ -263,7 +143,7 @@ function guidedSimplify(
   }
 
   const r = Math.max(1, Math.round(radius))
-  // eps = tolerance² so the variance threshold matches the bilateral's range sigma.
+  // eps = tolerance²: regions whose local std is below `tol` collapse to their mean.
   const tol = toleranceFromStrength(strength)
   const eps = tol * tol
 
@@ -274,61 +154,5 @@ function guidedSimplify(
 
   const out = new Float32Array(n)
   for (let i = 0; i < n; i++) out[i] = valid[i] ? Math.max(0, Math.min(1, current[i])) : NaN
-  return out
-}
-
-// --- Anti-alias pass ---
-
-/**
- * NaN-aware separable 3-tap gaussian ([0.25, 0.5, 0.25]) blended back into the
- * source by `amount`. In flat regions the blur is a no-op; only the hard,
- * stair-stepped seams left by simplification get rounded — i.e. anti-aliased —
- * without mushing real edges. Wraps toroidally so tiles stay seamless.
- */
-function antiAliasPass(src: Float32Array, width: number, height: number, amount: number): Float32Array {
-  const n = width * height
-  const valid = new Uint8Array(n)
-  for (let i = 0; i < n; i++) valid[i] = Number.isNaN(src[i]) ? 0 : 1
-
-  const blur1d = (input: Float32Array, output: Float32Array, horizontal: boolean) => {
-    for (let y = 0; y < height; y++) {
-      const row = y * width
-      for (let x = 0; x < width; x++) {
-        const idx = row + x
-        if (!valid[idx]) {
-          output[idx] = NaN
-          continue
-        }
-        let pIdx: number
-        let nIdx: number
-        if (horizontal) {
-          pIdx = row + (x === 0 ? width - 1 : x - 1)
-          nIdx = row + (x === width - 1 ? 0 : x + 1)
-        } else {
-          pIdx = (y === 0 ? height - 1 : y - 1) * width + x
-          nIdx = (y === height - 1 ? 0 : y + 1) * width + x
-        }
-        let sum = input[idx] * 0.5
-        let weight = 0.5
-        if (valid[pIdx]) {
-          sum += input[pIdx] * 0.25
-          weight += 0.25
-        }
-        if (valid[nIdx]) {
-          sum += input[nIdx] * 0.25
-          weight += 0.25
-        }
-        output[idx] = sum / weight
-      }
-    }
-  }
-
-  const tmp = new Float32Array(n)
-  const blurred = new Float32Array(n)
-  blur1d(src, tmp, true)
-  blur1d(tmp, blurred, false)
-
-  const out = new Float32Array(n)
-  for (let i = 0; i < n; i++) out[i] = valid[i] ? src[i] + (blurred[i] - src[i]) * amount : NaN
   return out
 }

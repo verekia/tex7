@@ -62,15 +62,31 @@ export const MainView = () => {
       </Head>
       <div id="app">
         <header id="app-header">
-          <h1>tex7 — Luminance texture tool</h1>
-          <p className="intro">
-            Drop a colored texture. <b>Stage 1</b> cleans its luminance into the tileable grayscale texture you ship;{' '}
-            <b>Stage 2</b> previews that texture on a sphere recolored into three hand-authored bands. Scroll to switch
-            focus between the two; the dials live in the sidebar. Settings save/restore as a <code>.tex7.json</code>.
-          </p>
-
           <div className="header-bar">
-            <div className="header-left">
+            <div className="header-main">
+              <h1>tex7 — Luminance texture tool</h1>
+              <p className="intro">
+                Drop a colored texture. <b>Stage 1</b> cleans its luminance into the tileable grayscale texture you
+                ship; <b>Stage 2</b> previews that texture on a sphere recolored into three hand-authored bands. Scroll
+                to switch focus between the two; the dials live in the sidebar. Settings save/restore as a{' '}
+                <code>.tex7.json</code>.
+              </p>
+              <div className="config-bar">
+                <button
+                  id="btn-save-config"
+                  className="text-btn"
+                  type="button"
+                  title="Save all settings as a .tex7.json"
+                >
+                  Save config
+                </button>
+                <button id="btn-load-config" className="text-btn" type="button" title="Load a .tex7.json config">
+                  Load config
+                </button>
+                <input type="file" id="config-file-input" className="offscreen-input" accept="application/json,.json" />
+              </div>
+            </div>
+            <div className="header-textures">
               <div id="drop-zone-wrap">
                 <div id="drop-zone" className="drop-zone" tabIndex={0}>
                   <p>Drop a texture here or click to select.</p>
@@ -79,18 +95,8 @@ export const MainView = () => {
                 </div>
               </div>
               <div id="original-wrap" className="hidden">
-                <h2>Original</h2>
                 <canvas id="canvas-original"></canvas>
               </div>
-            </div>
-            <div className="config-bar">
-              <button id="btn-save-config" className="text-btn" type="button" title="Save all settings as a .tex7.json">
-                Save config
-              </button>
-              <button id="btn-load-config" className="text-btn" type="button" title="Load a .tex7.json config">
-                Load config
-              </button>
-              <input type="file" id="config-file-input" className="offscreen-input" accept="application/json,.json" />
             </div>
           </div>
           <div id="error-message" className="hidden"></div>
@@ -103,7 +109,7 @@ export const MainView = () => {
             </h2>
 
             <div className="control-group">
-              <span className="control-group-title">Clamp</span>
+              <span className="control-group-title">Tone</span>
               <Slider
                 id="clamp-low"
                 label="Dark clamp"
@@ -124,29 +130,49 @@ export const MainView = () => {
                 display="0.1%"
                 title="Clamp the lightest N% of pixels to white before normalizing."
               />
+              <Slider
+                id="shape-gamma"
+                label="Gamma"
+                min={0.2}
+                max={2}
+                step={0.05}
+                defaultValue={1}
+                display="1.00"
+                title="Exponent on the luminance. >1 darkens midtones, <1 lightens them."
+              />
+              <Slider
+                id="shape-contrast"
+                label="Contrast"
+                min={-0.5}
+                max={1}
+                step={0.02}
+                defaultValue={0}
+                display="0.00"
+                title="Positive pushes values toward an S-curve, negative flattens toward mid-gray."
+              />
             </div>
 
             <div className="control-group">
-              <span className="control-group-title">Simplify</span>
-              <div
-                className="toggle-group"
-                title="Bilateral: powerful edge-preserving smoothing. Guided (He et al.): smooth by construction, far less aliasing."
-              >
-                <button id="btn-simplify-bilateral" className="toggle-btn" type="button">
-                  Bilateral
-                </button>
-                <button id="btn-simplify-guided" className="toggle-btn active" type="button">
-                  Guided
+              <div className="control-group-head">
+                <span className="control-group-title">Simplify</span>
+                <button
+                  id="btn-simplify-toggle"
+                  className="group-toggle"
+                  type="button"
+                  aria-pressed="false"
+                  title="Bypass simplification to A/B against the raw luminance. Your settings are kept."
+                >
+                  Off
                 </button>
               </div>
               <Slider
                 id="simplify-strength"
                 label="Strength"
-                min={0}
+                min={1}
                 max={100}
                 step={1}
-                defaultValue={0}
-                display="off"
+                defaultValue={1}
+                display="1"
                 title="Edge-preserving smoothing tolerance. Areas with low luminance variation (grain, noise) melt into smooth surfaces while strong edges keep their contrast."
               />
               <Slider
@@ -168,60 +194,6 @@ export const MainView = () => {
                 defaultValue={3}
                 display="3"
                 title="Filter iterations. More passes flatten low-variation areas toward clean, uniform zones."
-              />
-              <Slider
-                id="simplify-antialias"
-                label="Anti-alias"
-                min={0}
-                max={1}
-                step={0.01}
-                defaultValue={0.3}
-                display="0.30"
-                title="Rounds the residual stair-stepped seams left by simplification (a light NaN-aware blur of only the hard edges). 0 = off."
-              />
-            </div>
-
-            <div className="control-group">
-              <span className="control-group-title">Shape</span>
-              <Slider
-                id="shape-gamma"
-                label="Gamma"
-                min={0.2}
-                max={2}
-                step={0.05}
-                defaultValue={1}
-                display="1.00"
-                title="Exponent on the luminance. >1 darkens midtones, <1 lightens them."
-              />
-              <Slider
-                id="shape-contrast"
-                label="Contrast"
-                min={-0.5}
-                max={1}
-                step={0.02}
-                defaultValue={0}
-                display="0.00"
-                title="Positive pushes values toward an S-curve, negative flattens toward mid-gray."
-              />
-              <Slider
-                id="posterize-levels"
-                label="Posterize"
-                min={0}
-                max={16}
-                step={1}
-                defaultValue={0}
-                display="off"
-                title="Quantize the luminance into N bands for a hand-painted look. 0 disables."
-              />
-              <Slider
-                id="posterize-softness"
-                label="Band softness"
-                min={0}
-                max={1}
-                step={0.01}
-                defaultValue={0.25}
-                display="0.25"
-                title="Width of the smooth transition between posterize bands. 0 = hard steps."
               />
             </div>
           </div>
@@ -311,84 +283,39 @@ export const MainView = () => {
             <div className="control-group">
               <span className="control-group-title">Surface</span>
               <Slider
+                id="bump-scale"
+                label="Bump scale"
+                min={0}
+                max={0.1}
+                step={0.001}
+                defaultValue={0.02}
+                display="0.020"
+                title="Strength of the bump. Slope measured with a 3×3 Sobel stencil in a screen-derivative cotangent frame (Mana Blade), stable across camera distance."
+              />
+              <Slider
+                id="bump-offset"
+                label="Bump offset"
+                min={0.0005}
+                max={0.02}
+                step={0.0005}
+                defaultValue={0.005}
+                display="0.0050"
+                title="Half-width of the slope estimate, in tile units. Smaller hugs the luminance transitions tighter; larger spreads the shading into a broader, rounder relief."
+              />
+            </div>
+
+            <div className="control-group">
+              <span className="control-group-title">Scene</span>
+              <Slider
                 id="tex-scale"
                 label="Texture scale"
                 min={0.25}
                 max={10}
                 step={0.05}
-                defaultValue={2}
-                display="2.0×"
+                defaultValue={5}
+                display="5.0×"
                 title="UV repeat of the luminance texture on the sphere."
               />
-              <div
-                className="toggle-group"
-                title="Offset: 3×3 Sobel central differences at a fixed texture offset in a screen-derivative cotangent frame (Mana Blade) — stable across camera distance. Screen derivative: normal from screen-space luminance gradients — watch it fade as you zoom."
-              >
-                <button id="btn-bump-offset" className="toggle-btn active" type="button">
-                  Offset
-                </button>
-                <button id="btn-bump-screen" className="toggle-btn" type="button">
-                  Screen derivative
-                </button>
-              </div>
-              <div id="bump-offset-controls">
-                <Slider
-                  id="bump-scale"
-                  label="Bump scale"
-                  min={0}
-                  max={0.1}
-                  step={0.001}
-                  defaultValue={0.02}
-                  display="0.020"
-                  title="Strength of the fine bump layer (sharp shape edges / detail)."
-                />
-                <Slider
-                  id="bump-offset"
-                  label="Bump offset"
-                  min={0.0005}
-                  max={0.02}
-                  step={0.0005}
-                  defaultValue={0.005}
-                  display="0.0050"
-                  title="Half-width of the fine slope estimate, in tile units. Smaller hugs the luminance transitions tighter."
-                />
-                <Slider
-                  id="volume-scale"
-                  label="Volume scale"
-                  min={0}
-                  max={0.1}
-                  step={0.001}
-                  defaultValue={0.03}
-                  display="0.030"
-                  title="Strength of the broad bump layer — turns bright areas into rounded volume, not just edge creases (the 'bright = high' read)."
-                />
-                <Slider
-                  id="volume-offset"
-                  label="Volume offset"
-                  min={0.0005}
-                  max={0.01}
-                  step={0.0005}
-                  defaultValue={0.008}
-                  display="0.0080"
-                  title="Half-width of the broad slope estimate. Capped low — large offsets look terrible on fine detail; the Sobel stencil supplies the broadness instead."
-                />
-              </div>
-              <div id="bump-screen-controls" className="hidden">
-                <Slider
-                  id="screen-strength"
-                  label="Screen strength"
-                  min={0}
-                  max={40}
-                  step={0.5}
-                  defaultValue={12}
-                  display="12.0"
-                  title="Strength of the screen-derivative bump. This is the control over its effect; it fades with camera distance by design."
-                />
-              </div>
-            </div>
-
-            <div className="control-group">
-              <span className="control-group-title">Scene</span>
               <Slider
                 id="light-intensity"
                 label="Light"
@@ -399,26 +326,16 @@ export const MainView = () => {
                 display="5.00"
                 title="Directional light intensity."
               />
-              <div className="toggle-group">
-                <button id="btn-mat-standard" className="toggle-btn" type="button">
-                  Standard
-                </button>
-                <button
-                  id="btn-mat-lambert"
-                  className="toggle-btn active"
-                  type="button"
-                  title="Wrap-lighting Lambert matching Mana Blade's EnhancedLambertMaterial."
-                >
-                  Wrap Lambert
-                </button>
-                <button
-                  id="btn-mat-unlit"
-                  className="toggle-btn"
-                  type="button"
-                  title="No lighting — judge the raw band colors."
-                >
-                  Unlit
-                </button>
+              <div className="radio-group" role="radiogroup" aria-label="Material">
+                <label>
+                  <input type="radio" name="material" value="standard" /> Standard
+                </label>
+                <label title="Wrap-lighting Lambert matching Mana Blade's EnhancedLambertMaterial.">
+                  <input type="radio" name="material" value="lambert" defaultChecked /> Wrap Lambert
+                </label>
+                <label title="No lighting — judge the raw band colors.">
+                  <input type="radio" name="material" value="unlit" /> Unlit
+                </label>
               </div>
             </div>
           </div>

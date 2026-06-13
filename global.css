@@ -139,7 +139,16 @@
     justify-content: space-between;
     flex-wrap: wrap;
   }
-  .header-left {
+  /* Left column: title, intro, and the config buttons under it. */
+  .header-main {
+    flex: 1 1 420px;
+    min-width: 0;
+  }
+  .header-main .config-bar {
+    margin-top: 0.25rem;
+  }
+  /* Right column: the dropped texture / its luminance source, level with the title. */
+  .header-textures {
     display: flex;
     gap: 1.5rem;
     align-items: flex-start;
@@ -235,6 +244,13 @@
     letter-spacing: 0.08em;
     color: var(--color-muted-3);
   }
+  /* Group title row with a control (the On/Off toggle) pinned to the right. */
+  .control-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
   /* Each slider row: name + value on top, full-width slider below. */
   .control-group label {
     display: grid;
@@ -276,32 +292,43 @@
     padding: 2px;
   }
 
-  /* Toggles — fill the sidebar width, buttons share the row */
-  .toggle-group {
-    display: flex;
-    width: 100%;
-  }
-  .toggle-btn {
-    flex: 1;
+  /* Compact On/Off label pinned to the right of a group title. */
+  .group-toggle {
     margin-top: 0;
-    padding: 0.3rem 0.5rem;
-    font-size: 0.78rem;
-    border-radius: 0;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: 4px;
     border: 1px solid var(--color-line-strong);
-    white-space: nowrap;
+    background: var(--color-bg-2);
+    color: var(--color-muted-3);
   }
-  .toggle-btn:first-child {
-    border-radius: 4px 0 0 4px;
-  }
-  .toggle-btn:last-child {
-    border-radius: 0 4px 4px 0;
-  }
-  .toggle-btn + .toggle-btn {
-    border-left: none;
-  }
-  .toggle-btn.active {
-    background: var(--color-line-strong);
+  .group-toggle[aria-pressed='true'] {
+    background: var(--color-accent-bg);
+    border-color: var(--color-accent);
     color: #fff;
+  }
+
+  /* Radio groups (mutually-exclusive choices) — the checked dot shows selection. */
+  .radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.1rem;
+  }
+  .control-group .radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--color-muted);
+    cursor: pointer;
+  }
+  .radio-group input[type='radio'] {
+    margin: 0;
+    accent-color: var(--color-accent);
+    cursor: pointer;
   }
 
   /* 3D preview — fills the preview column as a square. */
@@ -404,12 +431,6 @@
     height: 1px;
     opacity: 0;
     pointer-events: none;
-  }
-
-  /* Bump sub-groups participate in the parent control-group flex layout */
-  #bump-offset-controls,
-  #bump-screen-controls {
-    display: contents;
   }
 
   /* Luminance histogram visualizer */

@@ -27,10 +27,6 @@ export interface ShapeOptions {
   gamma: number
   /** -1..1. Positive pushes toward an S-curve, negative flattens toward 0.5. */
   contrast: number
-  /** 0 = off, otherwise number of bands (2..16). */
-  posterizeLevels: number
-  /** 0..1 width of the smooth transition between posterize bands. */
-  posterizeSoftness: number
 }
 
 export function loadImage(file: File): Promise<HTMLImageElement> {
@@ -105,7 +101,7 @@ export function computeBaseMap(data: Uint8ClampedArray, width: number, height: n
 
 /**
  * Remap a (simplified) luminance map into the final texture values:
- * percentile clamp normalization, then invert / gamma / contrast / posterize.
+ * percentile clamp normalization, then gamma / contrast.
  * Cheap enough to rerun on every slider tick.
  */
 export function shapeLuminance(map: Float32Array, opaqueIndices: Int32Array, opts: ShapeOptions): Float32Array {
@@ -121,7 +117,7 @@ export function shapeLuminance(map: Float32Array, opaqueIndices: Int32Array, opt
   const lo = sorted[loIdx]
   const range = sorted[hiIdx] - lo
 
-  const { gamma, contrast, posterizeLevels: levels, posterizeSoftness: softness } = opts
+  const { gamma, contrast } = opts
 
   for (let i = 0; i < n; i++) {
     const idx = opaqueIndices[i]
@@ -130,20 +126,6 @@ export function shapeLuminance(map: Float32Array, opaqueIndices: Int32Array, opt
     if (gamma !== 1) v = Math.pow(v, gamma)
     if (contrast > 0) v += (v * v * (3 - 2 * v) - v) * contrast
     else if (contrast < 0) v += (0.5 - v) * -contrast
-    if (levels >= 2) {
-      const f = v * (levels - 1)
-      const band = Math.floor(f)
-      const frac = f - band
-      let fr: number
-      if (softness <= 0) {
-        fr = frac < 0.5 ? 0 : 1
-      } else {
-        const t = (frac - 0.5 + softness / 2) / softness
-        const ct = t < 0 ? 0 : t > 1 ? 1 : t
-        fr = ct * ct * (3 - 2 * ct)
-      }
-      v = (band + fr) / (levels - 1)
-    }
     out[idx] = v
   }
 

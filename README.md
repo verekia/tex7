@@ -15,18 +15,14 @@ bun dev
 
 1. **Luminance extraction** — Rec. 709 luminance of the linearized sRGB pixels, min-max normalized
    (single texture, no normal map, no KTX2).
-2. **Simplify** — edge-preserving smoothing with toroidal (tiling-safe) wrapping, so low-variation
-   areas (rock grain, noise) melt into smooth surfaces while strong edges keep their full contrast.
-   Two interchangeable engines:
-   - **Bilateral** — iterated separable bilateral filter. Powerful and controllable; can leave
-     stair-stepped seams on diagonal edges.
-   - **Guided** — He et al.'s self-guided filter. Smooth by construction (little to no aliasing), O(n).
+2. **Simplify** — edge-preserving smoothing (He et al.'s self-guided filter) with toroidal
+   (tiling-safe) wrapping, so low-variation areas (rock grain, noise) melt into smooth surfaces
+   while strong edges keep their full contrast. Smooth by construction (little to no aliasing) and
+   O(n) regardless of radius; a master On/Off toggle bypasses it to A/B against the raw luminance.
 
-   An **Anti-alias** slider runs a light NaN-aware pass over the result to round any residual jaggies.
-
-3. **Clamp + shape** — dark/light percentile clamps re-expand the mid-range, then gamma (≤ 2),
-   contrast (≥ −0.5), and soft posterize. These reruns are cheap; only the simplify sliders trigger
-   the expensive filter.
+3. **Tone** — dark/light percentile clamps re-expand the mid-range, then gamma (≤ 2) and contrast
+   (≥ −0.5) shape the curve. These reruns are cheap; only the simplify sliders trigger the expensive
+   filter.
 4. **Download** — the luminance preview has a PNG download badge; that grayscale file is the only
    texture you ship. Settings can be saved/loaded as a `.tex7.json` (see below).
 
@@ -50,24 +46,20 @@ A histogram of the final output sits under the luminance preview. The end bars a
 clamps trim to pure black/white, the three regions are tinted to the bands, and the two pivots are
 drawn as lines — so you can place the trims and pivots where they condense the most information.
 
-## Bump: the Mana Blade offset technique (+ volume)
+## Bump: the Mana Blade offset technique
 
 The luminance is reused as a height field. The slope is measured with a **3×3 Sobel stencil at a
 fixed texture offset** (averaging across the perpendicular axis kills the texel-grid pixelation a
 2-tap difference shows at small offsets) and applied in a screen-derivative cotangent frame
 (Schüler's tangent-less normal mapping), so strength is stable across camera distance.
 
-Two layers are summed — they are the **same operation at two offset scales**:
+- **Bump scale** — strength of the perturbation.
+- **Bump offset** — the slope's sampling half-width in tile units: smaller hugs the luminance
+  transitions tighter (crisp creases); larger spreads the shading into a broader, rounder relief.
 
-- **Bump** (small offset) — fine, sharp detail and shape edges.
-- **Volume** (broader offset, capped low) — averages across whole shapes so a bright blob tilts as
-  one rounded mound: the "bright = high" read, rather than just edge creases. (A normal can only
-  encode slope, never absolute height, so this broad gradient is how a single luminance channel
-  reads as volume without true displacement.)
-
-The **Screen derivative** toggle builds the normal from screen-space luminance gradients instead
-(Mikkelsen's unparametrized bump), with its own **Screen strength** slider — it intentionally fades
-as the camera zooms, which is why the game uses the offset technique on soft mip-filtered patterns.
+This is exactly the game's `BumpNode` (one offset layer), so the preview matches what ships. (A
+normal can only encode slope, never absolute height — so "bright = high" reads as volume through
+its broad-scale gradient, which is the larger-offset end of this same control, not a separate term.)
 
 ## Materials
 

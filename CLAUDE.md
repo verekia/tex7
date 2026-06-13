@@ -32,14 +32,14 @@ Next.js Pages Router, but it's really a vanilla-TS app: `pages/index.tsx` dynami
 `MainView` with `ssr: false`, and almost all logic lives in `src/`.
 
 - **`src/process.ts`** — CPU luminance pipeline (no GPU): load → linear Rec.709 luminance →
-  min-max normalize (`computeBaseMap`) → `shapeLuminance` (percentile clamp, gamma, contrast,
-  posterize) → grayscale `ImageData`. This produces the texture that ships.
-- **`src/simplify.ts`** — edge-preserving smoothing, two engines (`bilateral`, `guided`) + an
-  anti-alias pass, all NaN-aware and toroidally wrapped for tileability.
+  min-max normalize (`computeBaseMap`) → `shapeLuminance` (percentile clamp, gamma, contrast) →
+  grayscale `ImageData`. This produces the texture that ships.
+- **`src/simplify.ts`** — edge-preserving smoothing (He et al.'s self-guided filter), NaN-aware
+  and toroidally wrapped for tileability.
 - **`src/three-scene.ts`** — the WebGPU/TSL sphere preview. Builds the **3-band color node** and the
-  **bump normal node** (offset mode = 3×3 Sobel slope in a Schüler cotangent frame, fine "Bump" +
-  broad "Volume"; screen mode = Mikkelsen screen-derivative). All params are `uniform()`s with
-  `setX()` setters. Default material is Wrap Lambert (matches the game), default light 5.
+  **bump normal node** (a single 3×3 Sobel slope of the luminance heightfield in a Schüler cotangent
+  frame — `bumpScale` + `bumpOffset`, matching the game's `BumpNode`). All params are `uniform()`s
+  with `setX()` setters. Default material is Wrap Lambert (matches the game), default light 5.
 - **`src/visualizer.ts`** — renders the luminance histogram (trim end-bars + band tints + pivot lines).
 - **`src/config.ts`** — `.tex7.json` (de)serialization for save/load.
 - **`src/main-init.ts`** — the glue. Owns a **control registry** (`sliders` / `colors` / `toggles`)

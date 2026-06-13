@@ -8,11 +8,10 @@ import {
   type LoadedTexture,
   type ShapeOptions,
 } from './process'
-import { simplifyLuminance, type SimplifyMethod, type SimplifyOptions } from './simplify'
+import { simplifyLuminance, type SimplifyOptions } from './simplify'
 import {
   initThreeScene,
   notifyLuminanceUpdated,
-  setBumpMode,
   setBumpOffset,
   setBumpScale,
   setCrossfade,
@@ -23,11 +22,7 @@ import {
   setLightPivot,
   setMaterialType,
   setMidColor,
-  setScreenStrength,
   setTextureRepeat,
-  setVolumeOffset,
-  setVolumeScale,
-  type BumpMode,
   type MaterialType,
 } from './three-scene'
 import { renderLuminanceHistogram } from './visualizer'
@@ -54,7 +49,10 @@ function rafThrottle(fn: () => void): () => void {
 
 type SliderDef = { id: string; format: (v: number) => string; apply: (v: number) => void }
 type ColorDef = { id: string; apply: (hex: string) => void }
-type ToggleDef = { key: string; buttons: { id: string; value: string }[]; apply: (value: string) => void }
+/** A set of radio inputs sharing `name` (also the config key); one value is selected. */
+type RadioDef = { name: string; apply: (value: string) => void }
+/** A single on/off toggle button (shows "On"/"Off"). `key` is the config key. */
+type SwitchDef = { id: string; key: string; apply: (on: boolean) => void }
 
 export function init() {
   if (initialized) return
@@ -84,14 +82,17 @@ export function init() {
   let dragCounter = 0
   let baseName = 'tex7'
 
-  const simplifyOpts: SimplifyOptions = { method: 'guided', strength: 0, radius: 4, passes: 3, antiAlias: 0.3 }
+  const simplifyOpts: SimplifyOptions = {
+    enabled: false,
+    strength: 1,
+    radius: 4,
+    passes: 3,
+  }
   const shapeOpts: ShapeOptions = {
     clampLow: 0.001,
     clampHigh: 0.001,
     gamma: 1,
     contrast: 0,
-    posterizeLevels: 0,
-    posterizeSoftness: 0.25,
   }
 
   // --- Display helpers ---
@@ -127,7 +128,7 @@ export function init() {
 
   function updateStatus() {
     if (!loaded) return
-    statusEl.textContent = `${loaded.width}×${loaded.height} · ${simplifyOpts.method} simplify ${simplifyMs} ms`
+    statusEl.textContent = `${loaded.width}×${loaded.height} · simplify ${simplifyMs} ms`
   }
 
   function drawTiled() {
@@ -242,14 +243,6 @@ export function init() {
       },
     },
     {
-      id: 'simplify-antialias',
-      format: v => v.toFixed(2),
-      apply: v => {
-        simplifyOpts.antiAlias = v
-        scheduleSimplify()
-      },
-    },
-    {
       id: 'shape-gamma',
       format: v => v.toFixed(2),
       apply: v => {
@@ -262,22 +255,6 @@ export function init() {
       format: v => v.toFixed(2),
       apply: v => {
         shapeOpts.contrast = v
-        scheduleShape()
-      },
-    },
-    {
-      id: 'posterize-levels',
-      format: v => (v < 2 ? 'off' : `${v}`),
-      apply: v => {
-        shapeOpts.posterizeLevels = v < 2 ? 0 : v
-        scheduleShape()
-      },
-    },
-    {
-      id: 'posterize-softness',
-      format: v => v.toFixed(2),
-      apply: v => {
-        shapeOpts.posterizeSoftness = v
         scheduleShape()
       },
     },
@@ -301,9 +278,6 @@ export function init() {
     { id: 'tex-scale', format: v => `${v.toFixed(1)}×`, apply: setTextureRepeat },
     { id: 'bump-scale', format: v => v.toFixed(3), apply: setBumpScale },
     { id: 'bump-offset', format: v => v.toFixed(4), apply: setBumpOffset },
-    { id: 'volume-scale', format: v => v.toFixed(3), apply: setVolumeScale },
-    { id: 'volume-offset', format: v => v.toFixed(4), apply: setVolumeOffset },
-    { id: 'screen-strength', format: v => v.toFixed(1), apply: setScreenStrength },
     { id: 'light-intensity', format: v => v.toFixed(2), apply: setDirectionalIntensity },
   ]
 
@@ -313,53 +287,38 @@ export function init() {
     { id: 'picker-light', apply: setLightColor },
   ]
 
-  function updateBumpModeVisibility(mode: string) {
-    $('bump-offset-controls').classList.toggle('hidden', mode !== 'offset')
-    $('bump-screen-controls').classList.toggle('hidden', mode !== 'screen')
-  }
-
-  const toggles: ToggleDef[] = [
+  const radios: RadioDef[] = [
     {
-      key: 'simplify-method',
-      buttons: [
-        { id: 'btn-simplify-bilateral', value: 'bilateral' },
-        { id: 'btn-simplify-guided', value: 'guided' },
-      ],
-      apply: value => {
-        simplifyOpts.method = value as SimplifyMethod
-        scheduleSimplify()
-      },
-    },
-    {
-      key: 'bump-mode',
-      buttons: [
-        { id: 'btn-bump-offset', value: 'offset' },
-        { id: 'btn-bump-screen', value: 'screen' },
-      ],
-      apply: value => {
-        setBumpMode(value as BumpMode)
-        updateBumpModeVisibility(value)
-      },
-    },
-    {
-      key: 'material',
-      buttons: [
-        { id: 'btn-mat-standard', value: 'standard' },
-        { id: 'btn-mat-lambert', value: 'lambert' },
-        { id: 'btn-mat-unlit', value: 'unlit' },
-      ],
+      name: 'material',
       apply: value => setMaterialType(value as MaterialType),
     },
   ]
 
-  function activateToggle(t: ToggleDef, value: string) {
-    for (const b of t.buttons) $(b.id).classList.toggle('active', b.value === value)
-    t.apply(value)
+  const switches: SwitchDef[] = [
+    {
+      id: 'btn-simplify-toggle',
+      key: 'simplify-enabled',
+      apply: on => {
+        simplifyOpts.enabled = on
+        scheduleSimplify()
+      },
+    },
+  ]
+
+  const radioValue = (name: string) =>
+    (document.querySelector(`input[name="${name}"]:checked`) as HTMLInputElement | null)?.value ?? ''
+
+  const setRadio = (name: string, value: string) => {
+    const el = document.querySelector(`input[name="${name}"][value="${value}"]`) as HTMLInputElement | null
+    if (el) el.checked = true
   }
 
-  function activeToggleValue(t: ToggleDef): string {
-    for (const b of t.buttons) if ($(b.id).classList.contains('active')) return b.value
-    return t.buttons[0].value
+  const switchOn = (s: SwitchDef) => $(s.id).getAttribute('aria-pressed') === 'true'
+
+  const setSwitch = (s: SwitchDef, on: boolean) => {
+    const btn = $(s.id)
+    btn.setAttribute('aria-pressed', String(on))
+    btn.textContent = on ? 'On' : 'Off'
   }
 
   // --- Config save / load ---
@@ -368,7 +327,8 @@ export function init() {
     const out: Tex7Settings = {}
     for (const s of sliders) out[s.id] = +($(s.id) as HTMLInputElement).value
     for (const c of colors) out[c.id] = ($(c.id) as HTMLInputElement).value
-    for (const t of toggles) out[t.key] = activeToggleValue(t)
+    for (const r of radios) out[r.name] = radioValue(r.name)
+    for (const s of switches) out[s.key] = switchOn(s) ? 'on' : 'off'
     return out
   }
 
@@ -388,9 +348,20 @@ export function init() {
       ;($(c.id) as HTMLInputElement).value = v
       c.apply(v)
     }
-    for (const t of toggles) {
-      const v = settings[t.key]
-      if (typeof v === 'string') activateToggle(t, v)
+    for (const r of radios) {
+      const v = settings[r.name]
+      if (typeof v === 'string') {
+        setRadio(r.name, v)
+        r.apply(v)
+      }
+    }
+    for (const s of switches) {
+      const v = settings[s.key]
+      if (typeof v === 'string') {
+        const on = v === 'on'
+        setSwitch(s, on)
+        s.apply(on)
+      }
     }
     // Each apply already scheduled work; force one clean recompute if a texture is loaded.
     if (loaded) void runSimplify()
@@ -535,10 +506,20 @@ export function init() {
     input.addEventListener('input', () => c.apply(input.value))
   }
 
-  for (const t of toggles) {
-    for (const b of t.buttons) {
-      $(b.id).addEventListener('click', () => activateToggle(t, b.value))
+  for (const r of radios) {
+    for (const el of document.querySelectorAll<HTMLInputElement>(`input[name="${r.name}"]`)) {
+      el.addEventListener('change', () => {
+        if (el.checked) r.apply(el.value)
+      })
     }
+  }
+
+  for (const s of switches) {
+    $(s.id).addEventListener('click', () => {
+      const on = !switchOn(s)
+      setSwitch(s, on)
+      s.apply(on)
+    })
   }
 
   $('btn-save-config').addEventListener('click', () => downloadConfig(`${baseName}.tex7.json`, collectSettings()))
