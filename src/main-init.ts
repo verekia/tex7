@@ -47,6 +47,27 @@ function rafThrottle(fn: () => void): () => void {
   }
 }
 
+// Minimal, dependency-free syntax highlighter for the integration TSL snippet.
+// Single left-to-right pass so tokens never nest; everything is HTML-escaped.
+const TSL_TOKEN =
+  /(\/\/[^\n]*)|('[^']*')|\b(import|from|const|new)\b|\b(Color|float|uniform|texture|mix|smoothstep|uv|vec2|positionView|normalView)\b|(\b\d+\.?\d*\b)/g
+
+function highlightTsl(code: string): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  let out = ''
+  let last = 0
+  let m: RegExpExecArray | null
+  TSL_TOKEN.lastIndex = 0
+  while ((m = TSL_TOKEN.exec(code)) !== null) {
+    out += esc(code.slice(last, m.index))
+    const cls = m[1] ? 'tok-c' : m[2] ? 'tok-s' : m[3] ? 'tok-k' : m[4] ? 'tok-f' : 'tok-n'
+    out += `<span class="${cls}">${esc(m[0])}</span>`
+    last = TSL_TOKEN.lastIndex
+  }
+  out += esc(code.slice(last))
+  return out
+}
+
 type SliderDef = { id: string; format: (v: number) => string; apply: (v: number) => void }
 type ColorDef = { id: string; apply: (hex: string) => void }
 /** A set of radio inputs sharing `name` (also the config key); one value is selected. */
@@ -72,6 +93,8 @@ export function init() {
   const sectionLuminance = $('section-luminance')
   const section3d = $('section-3d')
   const tiledSection = $('tiled-section')
+  const integrationSection = $('section-integration')
+  const integrationCode = $('integration-code').querySelector('code')!
   const threeContainer = $('three-container')
 
   let loaded: LoadedTexture | null = null
@@ -198,6 +221,58 @@ export function init() {
     runShape()
   }
   const scheduleSimplify = rafThrottle(() => void runSimplify())
+
+  // --- Integration guide: TSL that reproduces the preview from current settings ---
+
+  function buildIntegrationCode(): string {
+    const num = (id: string) => +($(id) as HTMLInputElement).value
+    const hex = (id: string) => ($(id) as HTMLInputElement).value
+    const repeat = num('tex-scale')
+    const dark = hex('picker-dark')
+    const mid = hex('picker-mid')
+    const light = hex('picker-light')
+    const dp = num('band-dark-pivot')
+    const lp = num('band-light-pivot')
+    const cf = num('band-crossfade')
+    const bumpScale = num('bump-scale')
+    const bumpOffset = num('bump-offset')
+    return `// tex7 → three.js TSL. Reproduces this sphere from one luminance channel.
+// Sample the map raw — map.colorSpace = NoColorSpace (no sRGB decode).
+import { Color } from 'three'
+import { float, mix, normalView, positionView, smoothstep, texture, uniform, uv, vec2 } from 'three/tsl'
+
+const uvN = uv().mul(${repeat}) // your tiling
+const lum = texture(map, uvN).r
+
+// Albedo — three-band recolor (dark / mid / light)
+const dark = uniform(new Color('${dark}'))
+const mid = uniform(new Color('${mid}'))
+const light = uniform(new Color('${light}'))
+const dp = float(${dp}), lp = float(${lp}), cf = float(${cf})
+const toMid = smoothstep(dp.sub(cf), dp.add(cf), lum)
+const toLight = smoothstep(lp.sub(cf), lp.add(cf), lum)
+material.colorNode = mix(mix(dark, mid, toMid), light, toLight)
+
+// Bump — 3×3 Sobel slope in a Schüler screen-derivative cotangent frame
+const e = float(${bumpOffset}), en = e.negate(), denom = e.mul(8), s = ${bumpScale}
+const h = (du, dv) => texture(map, uvN.add(vec2(du, dv))).r
+const dHdu = h(e, e).add(h(e, float(0)).mul(2)).add(h(e, en))
+  .sub(h(en, e).add(h(en, float(0)).mul(2)).add(h(en, en))).div(denom).mul(s)
+const dHdv = h(en, e).add(h(float(0), e).mul(2)).add(h(e, e))
+  .sub(h(en, en).add(h(float(0), en).mul(2)).add(h(e, en))).div(denom).mul(s)
+const sx = positionView.dFdx(), sy = positionView.dFdy()
+const u1 = uvN.dFdx(), u2 = uvN.dFdy()
+const tU = sy.cross(normalView).mul(u1.x).add(normalView.cross(sx).mul(u2.x))
+const tV = sy.cross(normalView).mul(u1.y).add(normalView.cross(sx).mul(u2.y))
+const inv = tU.dot(tU).max(tV.dot(tV)).inverseSqrt()
+material.normalNode = tU.mul(inv.mul(dHdu).negate()).add(tV.mul(inv.mul(dHdv).negate())).add(normalView).normalize()
+`
+  }
+
+  function renderIntegration() {
+    integrationCode.innerHTML = highlightTsl(buildIntegrationCode())
+  }
+  const scheduleIntegration = rafThrottle(renderIntegration)
 
   // --- Control registry (drives binding + config save/load) ---
 
@@ -365,6 +440,7 @@ export function init() {
     }
     // Each apply already scheduled work; force one clean recompute if a texture is loaded.
     if (loaded) void runSimplify()
+    renderIntegration()
   }
 
   async function loadConfigFile(file: File) {
@@ -465,6 +541,7 @@ export function init() {
       sectionLuminance.classList.remove('hidden')
       section3d.classList.remove('hidden')
       tiledSection.classList.remove('hidden')
+      integrationSection.classList.remove('hidden')
       updateDropZoneVisibility()
       void initThreeScene(threeContainer, canvasLuminance)
     } catch (err) {
@@ -498,12 +575,16 @@ export function init() {
       const v = +input.value
       if (valueEl) valueEl.textContent = s.format(v)
       s.apply(v)
+      scheduleIntegration()
     })
   }
 
   for (const c of colors) {
     const input = $(c.id) as HTMLInputElement
-    input.addEventListener('input', () => c.apply(input.value))
+    input.addEventListener('input', () => {
+      c.apply(input.value)
+      scheduleIntegration()
+    })
   }
 
   for (const r of radios) {
@@ -530,4 +611,14 @@ export function init() {
     if (file) void loadConfigFile(file)
     configFileInput.value = ''
   })
+
+  const copyBtn = $('btn-copy-tsl')
+  copyBtn.addEventListener('click', () => {
+    void navigator.clipboard?.writeText(buildIntegrationCode()).then(() => {
+      copyBtn.textContent = 'Copied'
+      setTimeout(() => (copyBtn.textContent = 'Copy'), 1200)
+    })
+  })
+
+  renderIntegration()
 }

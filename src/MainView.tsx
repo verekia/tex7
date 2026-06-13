@@ -351,6 +351,22 @@ export const MainView = () => {
           <h2>Tiled (3×3)</h2>
           <canvas id="canvas-tiled" className="checkerboard"></canvas>
         </section>
+
+        <section id="section-integration" className="hidden">
+          <div className="panel-head">
+            <h2>Integration — TSL</h2>
+            <button id="btn-copy-tsl" className="text-btn" type="button" title="Copy the TSL to the clipboard">
+              Copy
+            </button>
+          </div>
+          <p className="intro">
+            Drop-in three.js TSL that reproduces this sphere from the luminance texture — sample it raw (
+            <code>map.colorSpace = NoColorSpace</code>). The values below track your current settings.
+          </p>
+          <pre id="integration-code" className="code-block">
+            <code></code>
+          </pre>
+        </section>
       </div>
     </>
   )

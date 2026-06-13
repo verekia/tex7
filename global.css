@@ -417,6 +417,45 @@
     gap: 0.5rem;
     align-items: center;
   }
+
+  /* Heading row with a right-aligned action (e.g. the integration Copy button) */
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  /* Integration guide code block */
+  .code-block {
+    margin: 0.5rem 0 0;
+    padding: 1rem;
+    background: #15171c;
+    border: 1px solid var(--color-line);
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.76rem;
+    line-height: 1.55;
+    color: #c9d1e3;
+    tab-size: 2;
+  }
+  .code-block .tok-c {
+    color: #6b7488;
+    font-style: italic;
+  }
+  .code-block .tok-s {
+    color: #9ece6a;
+  }
+  .code-block .tok-k {
+    color: #bb9af7;
+  }
+  .code-block .tok-f {
+    color: #7dcfff;
+  }
+  .code-block .tok-n {
+    color: #ff9e64;
+  }
   .text-btn {
     margin-top: 0;
     padding: 0.25rem 0.6rem;
