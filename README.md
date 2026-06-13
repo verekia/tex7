@@ -1,9 +1,10 @@
 # tex7
 
 Single-texture luminance tool: drop a colored texture, clean its luminance up into a tileable
-grayscale map, and preview it on a sphere recolored from a **single base color** — the luminance
-drives both procedural darken/lighten of the albedo and a distance-stable bump. Built for the
-Mana Blade texturing workflow (ship one grayscale channel, do all coloring in the shader).
+grayscale map, and preview it on a sphere recolored into **three hand-authored bands** (dark / mid /
+light) with a distance-stable bump. Built for the Mana Blade texturing workflow — ship one grayscale
+channel, do all the coloring in the shader — and the preview is the _exact_ node graph the game uses,
+so what you tune here is what you get in-game.
 
 ```bash
 bun install
@@ -12,51 +13,71 @@ bun dev
 
 ## Pipeline
 
-1. **Luminance extraction** — Rec. 709 luminance of the linearized sRGB pixels, min-max
-   normalized (same approach as gradient-normal-textures, single texture, no normal map, no KTX2).
-2. **Simplify** — iterated separable bilateral filter with toroidal (tiling-safe) wrapping.
-   Same goal as png-cleanup's region unification: areas with low luminance variation (rock grain,
-   noise) melt into smooth surfaces while strong edges keep their full contrast. Strength sets the
-   tolerance, radius the spatial extent, and more passes converge toward piecewise-flat zones
-   without region seams.
-3. **Clamp + shape** — dark/light percentile clamps re-expand the mid-range, then optional
-   invert, gamma, contrast, and soft posterize (banded, hand-painted look). These reruns are cheap;
-   only the simplify sliders trigger the expensive filter.
+1. **Luminance extraction** — Rec. 709 luminance of the linearized sRGB pixels, min-max normalized
+   (single texture, no normal map, no KTX2).
+2. **Simplify** — edge-preserving smoothing with toroidal (tiling-safe) wrapping, so low-variation
+   areas (rock grain, noise) melt into smooth surfaces while strong edges keep their full contrast.
+   Two interchangeable engines:
+   - **Bilateral** — iterated separable bilateral filter. Powerful and controllable; can leave
+     stair-stepped seams on diagonal edges.
+   - **Guided** — He et al.'s self-guided filter. Smooth by construction (little to no aliasing), O(n).
+
+   An **Anti-alias** slider runs a light NaN-aware pass over the result to round any residual jaggies.
+
+3. **Clamp + shape** — dark/light percentile clamps re-expand the mid-range, then gamma (≤ 2),
+   contrast (≥ −0.5), and soft posterize. These reruns are cheap; only the simplify sliders trigger
+   the expensive filter.
 4. **Download** — the luminance preview has a PNG download badge; that grayscale file is the only
-   texture you ship.
+   texture you ship. Settings can be saved/loaded as a `.tex7.json` (see below).
 
-## Recoloring model: one base color, procedural variation
+## Recoloring model: three bands
 
-The two-color gradient used in Mana Blade / gradient-normal-textures always ended up being "base
-color and a darker version of it", so tex7 embraces a single base color and derives the variation:
+The albedo is recolored from **three hand-authored colors** the luminance cross-fades between — this
+replaces the older single-base-color ramp (its darken/lighten/shadow-saturation/hue-shift are gone;
+the bands are authored directly now):
 
-- **Pivot** — the luminance value that shows the base color unchanged.
-- **Darken** — below the pivot, the base is multiplied toward black.
-- **Lighten** — above the pivot, the base is mixed toward white.
-- **Shadow saturation** — darkened areas get a saturation boost, so shadows read painterly
-  instead of muddy gray-black.
-- **Hue shift** — rotates the hue across the ramp (shadows one way, highlights the other), the
-  classic painted-texture warm/cool shift.
+- **Dark / Mid / Light** — the three band colors (defaults black / gray / white, i.e. raw luminance).
+- **Dark pivot** — the luminance threshold where dark cross-fades into mid.
+- **Light pivot** — the luminance threshold where mid cross-fades into light.
+- **Crossfade** — half-width of the smoothstep transition at each pivot (0 = hard band edges).
 
-All of it runs in TSL uniforms on a WebGPURenderer (WebGL2 fallback is automatic), so every slider
-is realtime — the exact same node graph can be lifted into the game.
+It all runs as TSL uniforms on a WebGPURenderer, so every slider is realtime and the exact node graph
+is lifted into the game (`RampColorNode` in Mana Blade).
 
-## Bump: the Mana Blade two-offset technique
+## Luminance visualizer
 
-The luminance is reused as a height field. The slope is measured with **central differences at a
-fixed texture offset** (`bumpOffset`, the ± sampling half-width in tile units) and applied in a
-screen-derivative cotangent frame (Schüler's tangent-less normal mapping), scaled by `bumpScale`.
+A histogram of the final output sits under the luminance preview. The end bars are the pixels the
+clamps trim to pure black/white, the three regions are tinted to the bands, and the two pivots are
+drawn as lines — so you can place the trims and pivots where they condense the most information.
 
-After reviewing it against the alternatives, the technique stands as-is — it needs four texture
-taps but is stable across camera distance and needs no tangent attributes or extra textures.
-The **Screen derivative** toggle wires up the alternative (three.js `bumpMap()`-style one-screen-
-pixel forward differences, with a ×100 scale compensation so it shows up at all): notice how it
-shimmers and fades as the camera zooms, which is exactly why Mana Blade doesn't use it on soft
-mip-filtered patterns.
+## Bump: the Mana Blade offset technique (+ volume)
+
+The luminance is reused as a height field. The slope is measured with a **3×3 Sobel stencil at a
+fixed texture offset** (averaging across the perpendicular axis kills the texel-grid pixelation a
+2-tap difference shows at small offsets) and applied in a screen-derivative cotangent frame
+(Schüler's tangent-less normal mapping), so strength is stable across camera distance.
+
+Two layers are summed — they are the **same operation at two offset scales**:
+
+- **Bump** (small offset) — fine, sharp detail and shape edges.
+- **Volume** (broader offset, capped low) — averages across whole shapes so a bright blob tilts as
+  one rounded mound: the "bright = high" read, rather than just edge creases. (A normal can only
+  encode slope, never absolute height, so this broad gradient is how a single luminance channel
+  reads as volume without true displacement.)
+
+The **Screen derivative** toggle builds the normal from screen-space luminance gradients instead
+(Mikkelsen's unparametrized bump), with its own **Screen strength** slider — it intentionally fades
+as the camera zooms, which is why the game uses the offset technique on soft mip-filtered patterns.
 
 ## Materials
 
-- **Standard** — MeshStandardNodeMaterial, roughness 0.85.
-- **Wrap Lambert** — the same wrap lighting (`N·L + 0.3` wrap) as Mana Blade's
+- **Wrap Lambert** (default) — the same wrap lighting (`N·L + 0.3` wrap) as Mana Blade's
   `EnhancedLambertMaterial`, so tuned values transfer to the game's look.
-- **Unlit** — raw color ramp, no lighting.
+- **Standard** — MeshStandardNodeMaterial, roughness 0.85.
+- **Unlit** — raw band colors, no lighting.
+
+## Saving settings
+
+`Save config` writes a `<texture>.tex7.json` snapshot of every control. `Load config` — or dropping
+a `.json` (or a texture and its `.json` together) onto the page — restores them all, so a config can
+live next to its texture.

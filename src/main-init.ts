@@ -35,6 +35,8 @@ import { renderLuminanceHistogram } from './visualizer'
 let initialized = false
 
 const MAX_PREVIEW_SIZE = 256
+const LUM_DISPLAY_SCALE = 2
+const TILED_MAX = 540
 
 const $ = (id: string) => document.getElementById(id)!
 
@@ -64,7 +66,6 @@ export function init() {
   const errorMessage = $('error-message')
   const originalWrap = $('original-wrap')
   const canvasOriginal = $('canvas-original') as HTMLCanvasElement
-  const luminanceWrap = $('luminance-wrap')
   const canvasLuminance = $('canvas-luminance') as HTMLCanvasElement
   const canvasHistogram = $('canvas-histogram') as HTMLCanvasElement
   const canvasTiled = $('canvas-tiled') as HTMLCanvasElement
@@ -72,6 +73,7 @@ export function init() {
   const downloadPng = $('download-png') as HTMLButtonElement
   const sectionLuminance = $('section-luminance')
   const section3d = $('section-3d')
+  const tiledSection = $('tiled-section')
   const threeContainer = $('three-container')
 
   let loaded: LoadedTexture | null = null
@@ -82,7 +84,7 @@ export function init() {
   let dragCounter = 0
   let baseName = 'tex7'
 
-  const simplifyOpts: SimplifyOptions = { method: 'bilateral', strength: 0, radius: 4, passes: 3, antiAlias: 0.3 }
+  const simplifyOpts: SimplifyOptions = { method: 'guided', strength: 0, radius: 4, passes: 3, antiAlias: 0.3 }
   const shapeOpts: ShapeOptions = {
     clampLow: 0.001,
     clampHigh: 0.001,
@@ -133,8 +135,10 @@ export function init() {
     const [dw, dh] = getDisplayDimensions(loaded.width, loaded.height)
     canvasTiled.width = dw * 3
     canvasTiled.height = dh * 3
-    canvasTiled.style.width = `${dw * 3}px`
-    canvasTiled.style.height = `${dh * 3}px`
+    // Display capped so it sits beside the sphere without inflating the sticky preview.
+    const displayScale = Math.min(1, TILED_MAX / (dw * 3))
+    canvasTiled.style.width = `${Math.round(dw * 3 * displayScale)}px`
+    canvasTiled.style.height = `${Math.round(dh * 3 * displayScale)}px`
     const ctx = canvasTiled.getContext('2d')!
     for (let y = 0; y < 3; y++) {
       for (let x = 0; x < 3; x++) {
@@ -147,7 +151,8 @@ export function init() {
     if (!loaded || !finalMap) return
     const [dw] = getDisplayDimensions(loaded.width, loaded.height)
     const dpr = Math.min(2, window.devicePixelRatio || 1)
-    const cw = Math.max(180, dw)
+    // Match the (2×) luminance preview width so the histogram lines up under it.
+    const cw = Math.max(180, dw * LUM_DISPLAY_SCALE)
     const ch = 80
     if (canvasHistogram.width !== Math.round(cw * dpr)) {
       canvasHistogram.width = Math.round(cw * dpr)
@@ -169,8 +174,9 @@ export function init() {
     const [dw, dh] = getDisplayDimensions(loaded.width, loaded.height)
     canvasLuminance.width = loaded.width
     canvasLuminance.height = loaded.height
-    canvasLuminance.style.width = `${dw}px`
-    canvasLuminance.style.height = `${dh}px`
+    // The shipped texture is the focus of stage 1 — show it at 2× the preview size.
+    canvasLuminance.style.width = `${dw * LUM_DISPLAY_SCALE}px`
+    canvasLuminance.style.height = `${dh * LUM_DISPLAY_SCALE}px`
     canvasLuminance.getContext('2d')!.putImageData(imageData, 0, 0)
     drawTiled()
     notifyLuminanceUpdated()
@@ -405,9 +411,11 @@ export function init() {
   function updateDropZoneVisibility() {
     const dragging = dragCounter > 0
     const hasTexture = loaded != null
+    // Once a texture is loaded the stages own the screen; the drop zone only
+    // reappears while a file is being dragged in (drops are accepted anywhere).
     dropZoneWrap.classList.toggle('hidden', hasTexture && !dragging)
-    originalWrap.classList.toggle('hidden', !hasTexture || dragging)
-    luminanceWrap.classList.toggle('hidden', !hasTexture || dragging)
+    // The original sits in the header as a static reference once loaded.
+    originalWrap.classList.toggle('hidden', !hasTexture)
   }
 
   async function handleFiles(files: FileList | null | undefined) {
@@ -436,10 +444,13 @@ export function init() {
     e.preventDefault()
   })
 
+  // Accept a drop anywhere on the page — the drop zone can be scrolled out of view.
   window.addEventListener('drop', e => {
     e.preventDefault()
     dragCounter = 0
+    dropZone.classList.remove('drag-over')
     updateDropZoneVisibility()
+    void handleFiles(e.dataTransfer?.files)
   })
 
   dropZone.addEventListener('dragover', e => {
@@ -449,12 +460,6 @@ export function init() {
 
   dropZone.addEventListener('dragleave', () => {
     dropZone.classList.remove('drag-over')
-  })
-
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault()
-    dropZone.classList.remove('drag-over')
-    void handleFiles(e.dataTransfer?.files)
   })
 
   fileInput.addEventListener('change', () => {
@@ -488,6 +493,7 @@ export function init() {
 
       sectionLuminance.classList.remove('hidden')
       section3d.classList.remove('hidden')
+      tiledSection.classList.remove('hidden')
       updateDropZoneVisibility()
       void initThreeScene(threeContainer, canvasLuminance)
     } catch (err) {

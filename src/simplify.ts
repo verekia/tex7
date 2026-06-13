@@ -51,6 +51,17 @@ export function simplifyLuminance(
   return antiAlias > 0 ? antiAliasPass(simplified, width, height, antiAlias) : simplified
 }
 
+/**
+ * Shared luminance-difference tolerance both engines are calibrated to, so equal
+ * `strength` means "smooth variations up to this magnitude" in either one — and
+ * an A/B swap shows only the difference in *character*, not in amount. The
+ * bilateral uses it directly as the range sigma; the guided filter uses it as
+ * sqrt(eps) (the local-std threshold below which a region collapses to its mean).
+ */
+function toleranceFromStrength(strength: number): number {
+  return 0.3 * Math.pow(strength / 100, 1.5)
+}
+
 // --- Bilateral (iterated, separable) ---
 
 function bilateralSimplify(
@@ -62,8 +73,10 @@ function bilateralSimplify(
   passes: number,
 ): Float32Array {
   const r = Math.max(1, Math.min(Math.round(radius), Math.min(width, height) - 1))
-  const sigmaR = 0.002 + Math.pow(strength / 100, 1.5) * 0.3
-  const sigmaS = Math.max(0.5, r / 2)
+  const sigmaR = Math.max(0.002, toleranceFromStrength(strength))
+  // Gaussian sigma whose variance matches a box of half-width r (the guided
+  // filter's window), so both engines reach about as far spatially per radius.
+  const sigmaS = Math.max(0.5, r / Math.sqrt(3))
 
   const spatial = new Float32Array(2 * r + 1)
   for (let k = -r; k <= r; k++) spatial[k + r] = Math.exp(-(k * k) / (2 * sigmaS * sigmaS))
@@ -250,8 +263,9 @@ function guidedSimplify(
   }
 
   const r = Math.max(1, Math.round(radius))
-  const s = strength / 100
-  const eps = s * s * 0.16
+  // eps = tolerance² so the variance threshold matches the bilateral's range sigma.
+  const tol = toleranceFromStrength(strength)
+  const eps = tol * tol
 
   let current: Float32Array = work
   for (let pass = 0; pass < passes; pass++) {
