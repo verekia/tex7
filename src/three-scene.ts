@@ -24,16 +24,15 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import {
   BRDF_Lambert,
+  bumpMap,
   diffuseColor,
   float,
   mix,
   normalView,
-  positionView,
   smoothstep,
   texture,
   uniform,
   uv,
-  vec2,
 } from 'three/tsl'
 import {
   MeshBasicNodeMaterial,
@@ -112,49 +111,12 @@ function buildNodes(tex: CanvasTexture) {
   const toLight = smoothstep(uLightPivot.sub(uCrossfade), uLightPivot.add(uCrossfade), lum)
   const colorNode = mix(mix(uDarkColor, uMidColor, toMid), uLightColor, toLight)
 
-  // 3×3 Sobel slope at texel spacing `e`, scaled. Averaging across the
-  // perpendicular axis is what removes the staircase pixelation a 2-tap central
-  // difference shows at small offsets.
-  const heightAt = (du: ReturnType<typeof float>, dv: ReturnType<typeof float>) =>
-    texture(tex, uvNode.add(vec2(du, dv))).r
-  const e = uBumpOffset
-  const en = e.negate()
-  const tl = heightAt(en, e)
-  const tc = heightAt(float(0), e)
-  const tr = heightAt(e, e)
-  const ml = heightAt(en, float(0))
-  const mr = heightAt(e, float(0))
-  const bl = heightAt(en, en)
-  const bc = heightAt(float(0), en)
-  const br = heightAt(e, en)
-  const denom = e.mul(8)
-  const slopeU = tr
-    .add(mr.mul(2))
-    .add(br)
-    .sub(tl.add(ml.mul(2)).add(bl))
-    .div(denom)
-    .mul(uBumpScale)
-  const slopeV = tl
-    .add(tc.mul(2))
-    .add(tr)
-    .sub(bl.add(bc.mul(2)).add(br))
-    .div(denom)
-    .mul(uBumpScale)
-
-  const dp1 = positionView.dFdx()
-  const dp2 = positionView.dFdy()
-  const duv1 = uvNode.dFdx()
-  const duv2 = uvNode.dFdy()
-  const dp2perp = dp2.cross(normalView)
-  const dp1perp = normalView.cross(dp1)
-  const tangentU = dp2perp.mul(duv1.x).add(dp1perp.mul(duv2.x))
-  const tangentV = dp2perp.mul(duv1.y).add(dp1perp.mul(duv2.y))
-  const invMax = tangentU.dot(tangentU).max(tangentV.dot(tangentV)).inverseSqrt()
-  const normalNode = tangentU
-    .mul(invMax.mul(slopeU).negate())
-    .add(tangentV.mul(invMax.mul(slopeV).negate()))
-    .add(normalView)
-    .normalize()
+  // Experiment: hand the luminance straight to Three's built-in bumpMap node and
+  // let it do the height→normal conversion (Mikkelsen screen-space forward
+  // differencing). `bumpScale` is its intensity; `bumpOffset` no longer applies
+  // since Three samples the height at the screen-space UV derivative, not a fixed
+  // texel offset.
+  const normalNode = bumpMap(texture(tex, uvNode), uBumpScale)
 
   const standard = new MeshStandardNodeMaterial({ roughness: 0.85, metalness: 0 })
   const lambert = new WrapLambertMaterial()
