@@ -1,4 +1,4 @@
-# tex7
+# TEX7
 
 A **3-band luminance-based texture pipeline for Three.js TSL**. Drop in a colored texture; tex7
 extracts and cleans its luminance into a tileable grayscale map, then previews that map on a sphere

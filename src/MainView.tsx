@@ -58,13 +58,13 @@ export const MainView = () => {
   return (
     <>
       <Head>
-        <title>tex7 — 3-band luminance-based texture pipeline for Three.js TSL</title>
+        <title>TEX7 — 3-band luminance-based texture pipeline for Three.js TSL</title>
       </Head>
       <div id="app">
         <header id="app-header">
           <div className="header-bar">
             <div className="header-main">
-              <h1>tex7 — 3-band luminance-based texture pipeline for Three.js TSL</h1>
+              <h1>TEX7 — 3-band luminance-based texture pipeline for Three.js TSL</h1>
               <p className="intro">
                 Drop in a colored texture. <b>Stage 1</b> extracts and cleans its luminance into the tileable grayscale
                 map you ship; <b>Stage 2</b> previews that map on a sphere — recolored into three hand-authored bands
