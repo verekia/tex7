@@ -6,6 +6,10 @@ recolored into three hand-authored bands (dark / mid / light) with a distance-st
 one small grayscale PNG and do all the coloring in the shader — and the preview _is_ a Three.js TSL
 node graph you can copy straight into your own project.
 
+<p align="center">
+  <img width="670" height="461" alt="Image" src="https://github.com/user-attachments/assets/7c51a569-71cb-4ec9-9f88-83daf55c3d50" />
+</p>
+
 ```bash
 bun install
 bun dev
