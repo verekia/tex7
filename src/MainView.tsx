@@ -290,7 +290,7 @@ export const MainView = () => {
                 step={0.001}
                 defaultValue={0.02}
                 display="0.020"
-                title="Strength of the bump. Slope measured with a 3×3 Sobel stencil in a screen-derivative cotangent frame (Mana Blade), stable across camera distance."
+                title="Strength of the bump. Slope measured with a Sobel stencil in a screen-derivative cotangent frame, stable across camera distance."
               />
               <Slider
                 id="bump-offset"
@@ -302,6 +302,14 @@ export const MainView = () => {
                 display="0.0050"
                 title="Half-width of the slope estimate, in tile units. Smaller hugs the luminance transitions tighter; larger spreads the shading into a broader, rounder relief."
               />
+              <div className="radio-group" role="radiogroup" aria-label="Bump stencil">
+                <label title="Full 3×3 Sobel — 8 texture taps, smoothest.">
+                  <input type="radio" name="bump-stencil" value="8" defaultChecked /> 8-tap
+                </label>
+                <label title="4-tap diagonal — half the texture reads, near-identical look (the cheaper, lower-quality path).">
+                  <input type="radio" name="bump-stencil" value="4" /> 4-tap
+                </label>
+              </div>
             </div>
 
             <div className="control-group">
@@ -330,7 +338,7 @@ export const MainView = () => {
                 <label>
                   <input type="radio" name="material" value="standard" /> Standard
                 </label>
-                <label title="Wrap-lighting Lambert matching Mana Blade's EnhancedLambertMaterial.">
+                <label title="Valve-style wrap-lighting Lambert — softer terminator than stock Lambert.">
                   <input type="radio" name="material" value="lambert" defaultChecked /> Wrap Lambert
                 </label>
                 <label title="No lighting — judge the raw band colors.">
@@ -363,6 +371,17 @@ export const MainView = () => {
             Drop-in three.js TSL that reproduces this sphere from the luminance texture — sample it raw (
             <code>map.colorSpace = NoColorSpace</code>). The values below track your current settings.
           </p>
+          <div className="radio-group" role="radiogroup" aria-label="Bump code">
+            <label title="Export only the 8-tap Sobel.">
+              <input type="radio" name="code-stencil" value="8" /> 8-tap
+            </label>
+            <label title="Export only the 4-tap diagonal.">
+              <input type="radio" name="code-stencil" value="4" /> 4-tap
+            </label>
+            <label title="Export both, switched at runtime by a highTextureQuality boolean you wire to your own quality setting.">
+              <input type="radio" name="code-stencil" value="both" defaultChecked /> User choice
+            </label>
+          </div>
           <pre id="integration-code" className="code-block">
             <code></code>
           </pre>

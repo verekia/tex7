@@ -14,6 +14,7 @@ import {
   notifyLuminanceUpdated,
   setBumpOffset,
   setBumpScale,
+  setBumpStencil,
   setCrossfade,
   setDarkColor,
   setDarkPivot,
@@ -23,6 +24,7 @@ import {
   setMaterialType,
   setMidColor,
   setTextureRepeat,
+  type BumpStencil,
   type MaterialType,
 } from './three-scene'
 import { renderLuminanceHistogram } from './visualizer'
@@ -236,6 +238,46 @@ export function init() {
     const cf = num('band-crossfade')
     const bumpScale = num('bump-scale')
     const bumpOffset = num('bump-offset')
+    const codeStencil = (document.querySelector('input[name="code-stencil"]:checked') as HTMLInputElement | null)?.value
+    // The "Code" radio picks what to export: just the 8-tap stencil, just the 4-tap, or both wrapped
+    // in a `highTextureQuality` boolean so the consumer can flip quality at runtime. Each branch only
+    // emits the code for what it needs (8 or 4 alone never mentions the other).
+    const bumpBlock =
+      codeStencil === '8'
+        ? `// Bump — 8-tap 3×3 Sobel slope in a Schüler screen-derivative cotangent frame
+const e = float(${bumpOffset}), en = e.negate(), denom = e.mul(8), s = ${bumpScale}
+const h = (du, dv) => texture(map, uvN.add(vec2(du, dv))).r
+const dHdu = h(e, e).add(h(e, float(0)).mul(2)).add(h(e, en))
+  .sub(h(en, e).add(h(en, float(0)).mul(2)).add(h(en, en))).div(denom).mul(s)
+const dHdv = h(en, e).add(h(float(0), e).mul(2)).add(h(e, e))
+  .sub(h(en, en).add(h(float(0), en).mul(2)).add(h(e, en))).div(denom).mul(s)`
+        : codeStencil === '4'
+          ? `// Bump — 4-tap diagonal slope in a Schüler screen-derivative cotangent frame
+const e = float(${bumpOffset}), en = e.negate(), g = ${bumpScale} / (4 * ${bumpOffset})
+const h = (du, dv) => texture(map, uvN.add(vec2(du, dv))).r
+const dHdu = h(e, e).add(h(e, en)).sub(h(en, e)).sub(h(en, en)).mul(g)
+const dHdv = h(en, e).add(h(e, e)).sub(h(en, en)).sub(h(e, en)).mul(g)`
+          : `// Bump — Sobel slope in a Schüler screen-derivative cotangent frame.
+// highTextureQuality is your runtime quality toggle: 8-tap when on, 4-tap when off. The ternary runs
+// at graph-build time, so the unpicked stencil's taps never compile (the GPU only ever runs one).
+const highTextureQuality = true
+const e = float(${bumpOffset}), en = e.negate()
+const h = (du, dv) => texture(map, uvN.add(vec2(du, dv))).r
+const sobel8 = () => { // 8-tap 3×3 Sobel — smoothest
+  const denom = e.mul(8), s = ${bumpScale}
+  const dHdu = h(e, e).add(h(e, float(0)).mul(2)).add(h(e, en))
+    .sub(h(en, e).add(h(en, float(0)).mul(2)).add(h(en, en))).div(denom).mul(s)
+  const dHdv = h(en, e).add(h(float(0), e).mul(2)).add(h(e, e))
+    .sub(h(en, en).add(h(float(0), en).mul(2)).add(h(e, en))).div(denom).mul(s)
+  return [dHdu, dHdv]
+}
+const diag4 = () => { // 4-tap diagonal — half the texture reads
+  const g = ${bumpScale} / (4 * ${bumpOffset})
+  const dHdu = h(e, e).add(h(e, en)).sub(h(en, e)).sub(h(en, en)).mul(g)
+  const dHdv = h(en, e).add(h(e, e)).sub(h(en, en)).sub(h(e, en)).mul(g)
+  return [dHdu, dHdv]
+}
+const [dHdu, dHdv] = highTextureQuality ? sobel8() : diag4()`
     return `// tex7 → three.js TSL. Reproduces this sphere from one luminance channel.
 // Sample the map raw — map.colorSpace = NoColorSpace (no sRGB decode).
 import { Color } from 'three'
@@ -253,13 +295,7 @@ const toMid = smoothstep(dp.sub(cf), dp.add(cf), lum)
 const toLight = smoothstep(lp.sub(cf), lp.add(cf), lum)
 material.colorNode = mix(mix(dark, mid, toMid), light, toLight)
 
-// Bump — 3×3 Sobel slope in a Schüler screen-derivative cotangent frame
-const e = float(${bumpOffset}), en = e.negate(), denom = e.mul(8), s = ${bumpScale}
-const h = (du, dv) => texture(map, uvN.add(vec2(du, dv))).r
-const dHdu = h(e, e).add(h(e, float(0)).mul(2)).add(h(e, en))
-  .sub(h(en, e).add(h(en, float(0)).mul(2)).add(h(en, en))).div(denom).mul(s)
-const dHdv = h(en, e).add(h(float(0), e).mul(2)).add(h(e, e))
-  .sub(h(en, en).add(h(float(0), en).mul(2)).add(h(e, en))).div(denom).mul(s)
+${bumpBlock}
 const sx = positionView.dFdx(), sy = positionView.dFdy()
 const u1 = uvN.dFdx(), u2 = uvN.dFdy()
 const tU = sy.cross(normalView).mul(u1.x).add(normalView.cross(sx).mul(u2.x))
@@ -366,6 +402,15 @@ material.normalNode = tU.mul(inv.mul(dHdu).negate()).add(tV.mul(inv.mul(dHdv).ne
     {
       name: 'material',
       apply: value => setMaterialType(value as MaterialType),
+    },
+    {
+      name: 'bump-stencil',
+      apply: value => setBumpStencil(value as BumpStencil),
+    },
+    {
+      // Doesn't touch the scene — only re-renders the exported TSL for the chosen stencil(s).
+      name: 'code-stencil',
+      apply: () => scheduleIntegration(),
     },
   ]
 
