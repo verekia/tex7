@@ -76,3 +76,7 @@ settings. Choose **8-tap**, **4-tap**, or **User choice** (both stencils, switch
 `Save config` writes a `<texture>.tex7.json` snapshot of every control. `Load config` — or dropping a
 `.json` (or a texture and its `.json` together) onto the page — restores them all, so a config can
 live next to its texture.
+
+## License
+
+[MIT](LICENSE)

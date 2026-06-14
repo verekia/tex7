@@ -84,6 +84,15 @@ export const MainView = () => {
                   Load config
                 </button>
                 <input type="file" id="config-file-input" className="offscreen-input" accept="application/json,.json" />
+                <a
+                  className="text-btn"
+                  href="https://github.com/verekia/tex7/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View the source on GitHub"
+                >
+                  GitHub ↗
+                </a>
               </div>
             </div>
             <div className="header-textures">
