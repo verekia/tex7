@@ -4,15 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-tex7 is a single-page, client-only tool for authoring **grayscale luminance textures** for the Mana
-Blade game (sibling repo at `../manablade`). You drop a colored texture; tex7 extracts and cleans its
-luminance, then previews it on a WebGPU sphere recolored into three hand-authored bands with a bump.
-The shipped artifact is one grayscale PNG — all coloring happens in the shader.
+tex7 is a single-page, client-only tool for authoring **grayscale luminance textures** for Three.js
+TSL. You drop a colored texture; tex7 extracts and cleans its luminance, then previews it on a WebGPU
+sphere recolored into three hand-authored bands with a bump. The shipped artifact is one grayscale
+PNG — all coloring happens in the shader.
 
-**The preview mirrors the game.** tex7's TSL node graph (`src/three-scene.ts`) is the same one Mana
-Blade uses for world-natural materials (`client/core/textures.tsx` → `RampColorNode` + `BumpNode`).
-If you change the recolor or bump model here, keep `../manablade` in sync, and vice-versa. Both
-currently use the 3-band model (dark/mid/light + dark/light pivots + crossfade).
+The preview (`src/three-scene.ts`) is itself the TSL node graph the user exports and drops into their
+own project, so it's the source of truth: the 3-band model is dark/mid/light colors + dark/light
+pivots + crossfade, and any change to the recolor or bump here is a change to what users ship.
 
 ## Development Commands
 
@@ -38,8 +37,8 @@ Next.js Pages Router, but it's really a vanilla-TS app: `pages/index.tsx` dynami
   and toroidally wrapped for tileability.
 - **`src/three-scene.ts`** — the WebGPU/TSL sphere preview. Builds the **3-band color node** and the
   **bump normal node** (a single 3×3 Sobel slope of the luminance heightfield in a Schüler cotangent
-  frame — `bumpScale` + `bumpOffset`, matching the game's `BumpNode`). All params are `uniform()`s
-  with `setX()` setters. Default material is Wrap Lambert (matches the game), default light 5.
+  frame — `bumpScale` + `bumpOffset`, with an 8-tap/4-tap stencil toggle). All params are `uniform()`s
+  with `setX()` setters. Default material is Wrap Lambert, default light 5.
 - **`src/visualizer.ts`** — renders the luminance histogram (trim end-bars + band tints + pivot lines).
 - **`src/config.ts`** — `.tex7.json` (de)serialization for save/load.
 - **`src/main-init.ts`** — the glue. Owns a **control registry** (`sliders` / `colors` / `toggles`)
