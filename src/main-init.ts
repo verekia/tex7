@@ -35,6 +35,8 @@ let initialized = false
 
 const MAX_PREVIEW_SIZE = 256
 const LUM_DISPLAY_SCALE = 2
+// Cap on the tiled-preview backing store (px per side) — enough to inspect seams at 4× zoom.
+const TILED_BACKING_CAP = 2048
 
 const $ = (id: string) => document.getElementById(id)!
 
@@ -90,6 +92,7 @@ export function init() {
   const canvasOriginal = $('canvas-original') as HTMLCanvasElement
   const canvasLuminance = $('canvas-luminance') as HTMLCanvasElement
   const canvasLuminanceTiled = $('canvas-luminance-tiled') as HTMLCanvasElement
+  const tiledScroll = $('tiled-scroll')
   const canvasHistogram = $('canvas-histogram') as HTMLCanvasElement
   const statusEl = $('status')
   const downloadPng = $('download-png') as HTMLButtonElement
@@ -107,6 +110,7 @@ export function init() {
   let dragCounter = 0
   let baseName = 'tex7'
   let tiledPreview = false
+  let tiledZoom = 1
 
   const simplifyOpts: SimplifyOptions = {
     enabled: false,
@@ -165,33 +169,54 @@ export function init() {
   }
 
   // The shipped texture, drawn as a 2×2 tile to check how its edges wrap. The backing store
-  // is sized to the display footprint × devicePixelRatio (like the histogram) so the tiling
-  // stays crisp on hi-DPI screens; the CSS size matches the single view, so toggling between
-  // them doesn't reflow.
+  // carries the full tiled content (source resolution, capped) so the zoomed view stays crisp;
+  // CSS size and scrolling are handled by sizeTiledView, making zoom pure CSS magnification.
   function drawShipTiled() {
     if (!loaded) return
-    const [dw, dh] = getDisplayDimensions(loaded.width, loaded.height)
-    const cssW = dw * LUM_DISPLAY_SCALE
-    const cssH = dh * LUM_DISPLAY_SCALE
-    const dpr = Math.min(2, window.devicePixelRatio || 1)
-    canvasLuminanceTiled.width = Math.round(cssW * dpr)
-    canvasLuminanceTiled.height = Math.round(cssH * dpr)
-    canvasLuminanceTiled.style.width = `${cssW}px`
-    canvasLuminanceTiled.style.height = `${cssH}px`
+    const bw = Math.min(loaded.width * 2, TILED_BACKING_CAP)
+    const bh = Math.min(loaded.height * 2, TILED_BACKING_CAP)
+    canvasLuminanceTiled.width = bw
+    canvasLuminanceTiled.height = bh
     const ctx = canvasLuminanceTiled.getContext('2d')!
-    const tw = canvasLuminanceTiled.width / 2
-    const th = canvasLuminanceTiled.height / 2
+    const tw = bw / 2
+    const th = bh / 2
     for (let y = 0; y < 2; y++) {
       for (let x = 0; x < 2; x++) {
         ctx.drawImage(canvasLuminance, x * tw, y * th, tw, th)
       }
     }
+    sizeTiledView()
   }
 
-  // Swap the ship preview between the single texture and its 2×2 tiling.
+  // The scroll viewport stays the single-view footprint; the canvas itself grows with the zoom
+  // factor so it overflows and the scroll bars let you pan around.
+  function sizeTiledView() {
+    if (!loaded) return
+    const [dw, dh] = getDisplayDimensions(loaded.width, loaded.height)
+    const baseW = dw * LUM_DISPLAY_SCALE
+    const baseH = dh * LUM_DISPLAY_SCALE
+    tiledScroll.style.width = `${baseW}px`
+    tiledScroll.style.height = `${baseH}px`
+    canvasLuminanceTiled.style.width = `${baseW * tiledZoom}px`
+    canvasLuminanceTiled.style.height = `${baseH * tiledZoom}px`
+  }
+
+  // Center the scroll on the tile cross — where the wrap seams meet — so zoom lands on the seam.
+  function centerTiledScroll() {
+    tiledScroll.scrollLeft = (tiledScroll.scrollWidth - tiledScroll.clientWidth) / 2
+    tiledScroll.scrollTop = (tiledScroll.scrollHeight - tiledScroll.clientHeight) / 2
+  }
+
+  function applyTiledZoom() {
+    sizeTiledView()
+    centerTiledScroll()
+  }
+
+  // Swap the ship preview between the single texture and its (scrollable) 2×2 tiling.
   function applyTiledView() {
     canvasLuminance.classList.toggle('hidden', tiledPreview)
-    canvasLuminanceTiled.classList.toggle('hidden', !tiledPreview)
+    tiledScroll.classList.toggle('hidden', !tiledPreview)
+    if (tiledPreview) centerTiledScroll()
   }
 
   function renderHistogram() {
@@ -466,6 +491,14 @@ material.normalNode = tU.mul(inv.mul(dHdu).negate()).add(tV.mul(inv.mul(dHdv).ne
       // Doesn't touch the scene — only re-renders the exported TSL for the chosen stencil(s).
       name: 'code-stencil',
       apply: () => scheduleIntegration(),
+    },
+    {
+      // Pure CSS magnification of the tiled preview (with scroll); doesn't affect the output.
+      name: 'tiled-zoom',
+      apply: value => {
+        tiledZoom = +value
+        applyTiledZoom()
+      },
     },
   ]
 

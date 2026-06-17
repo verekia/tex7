@@ -278,11 +278,32 @@ export const MainView = () => {
                     >
                       Off
                     </button>
+                    <div
+                      className="radio-group seg"
+                      role="radiogroup"
+                      aria-label="Tiled zoom"
+                      title="Zoom the tiled preview to inspect seams up close, then scroll to pan around."
+                    >
+                      <label>
+                        <input type="radio" name="tiled-zoom" value="1" defaultChecked />
+                        1×
+                      </label>
+                      <label>
+                        <input type="radio" name="tiled-zoom" value="2" />
+                        2×
+                      </label>
+                      <label>
+                        <input type="radio" name="tiled-zoom" value="4" />
+                        4×
+                      </label>
+                    </div>
                   </div>
                 </div>
                 <div className="canvas-wrap">
                   <canvas id="canvas-luminance" className="checkerboard"></canvas>
-                  <canvas id="canvas-luminance-tiled" className="checkerboard hidden"></canvas>
+                  <div id="tiled-scroll" className="tiled-scroll hidden">
+                    <canvas id="canvas-luminance-tiled" className="checkerboard"></canvas>
+                  </div>
                   <button id="download-png" className="dl-badge" type="button" title="Download luminance as PNG">
                     <span className="dl-badge-label">PNG</span>
                     <DownloadArrow />
