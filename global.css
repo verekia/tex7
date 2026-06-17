@@ -204,12 +204,6 @@
     gap: 1rem;
   }
 
-  /* Tiled view: full-width, non-sticky, the last thing reached at the bottom. */
-  #tiled-section {
-    border-top: 1px solid var(--color-line);
-    padding-top: 1.5rem;
-  }
-
   #error-message {
     margin-top: 1rem;
     padding: 0.75rem 1rem;
@@ -424,6 +418,12 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
+  }
+  /* Label + On/Off toggle grouped at the right of a preview heading. */
+  .preview-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   /* Integration guide code block */

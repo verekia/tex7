@@ -220,24 +220,44 @@ export const MainView = () => {
                 </button>
               </div>
               <Slider
-                id="seam-range"
-                label="Range"
+                id="seam-range-x"
+                label="Range X"
                 min={1}
                 max={128}
                 step={1}
                 defaultValue={16}
                 display="16 px"
-                title="How far the edge correction reaches into the texture, in pixels. Small ranges fix fine grain; larger ranges connect bigger shapes across the seam."
+                title="How far the correction reaches inward from the left and right edges, in pixels. Larger ranges connect bigger shapes across the seam."
               />
               <Slider
-                id="seam-amount"
-                label="Amount"
+                id="seam-amount-x"
+                label="Amount X"
                 min={0}
                 max={100}
                 step={1}
                 defaultValue={100}
                 display="100%"
-                title="How much of the edge mismatch to close. 100% makes opposite edges meet exactly; lower values correct partially for a subtler touch."
+                title="How much of the left/right edge mismatch to close. 100% makes the two edges meet exactly; 0% disables the X fix."
+              />
+              <Slider
+                id="seam-range-y"
+                label="Range Y"
+                min={1}
+                max={128}
+                step={1}
+                defaultValue={16}
+                display="16 px"
+                title="How far the correction reaches inward from the top and bottom edges, in pixels. Larger ranges connect bigger shapes across the seam."
+              />
+              <Slider
+                id="seam-amount-y"
+                label="Amount Y"
+                min={0}
+                max={100}
+                step={1}
+                defaultValue={100}
+                display="100%"
+                title="How much of the top/bottom edge mismatch to close. 100% makes the two edges meet exactly; 0% disables the Y fix."
               />
             </div>
           </div>
@@ -245,9 +265,24 @@ export const MainView = () => {
           <div className="stage-preview">
             <div className="stage-preview-inner">
               <div id="luminance-wrap">
-                <h2>Luminance — the texture you ship</h2>
+                <div className="panel-head">
+                  <h2>Luminance — the texture you ship</h2>
+                  <div className="preview-toggle">
+                    <span className="control-group-title">Tiled</span>
+                    <button
+                      id="btn-tiled-toggle"
+                      className="group-toggle"
+                      type="button"
+                      aria-pressed="false"
+                      title="Preview the texture as a 2×2 tile to check how its edges wrap. The downloaded PNG is always a single tile."
+                    >
+                      Off
+                    </button>
+                  </div>
+                </div>
                 <div className="canvas-wrap">
                   <canvas id="canvas-luminance" className="checkerboard"></canvas>
+                  <canvas id="canvas-luminance-tiled" className="checkerboard hidden"></canvas>
                   <button id="download-png" className="dl-badge" type="button" title="Download luminance as PNG">
                     <span className="dl-badge-label">PNG</span>
                     <DownloadArrow />
@@ -397,11 +432,6 @@ export const MainView = () => {
               <div id="three-container"></div>
             </div>
           </div>
-        </section>
-
-        <section id="tiled-section" className="hidden">
-          <h2>Tiled (3×3)</h2>
-          <canvas id="canvas-tiled" className="checkerboard"></canvas>
         </section>
 
         <section id="section-integration" className="hidden">

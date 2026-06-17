@@ -34,7 +34,6 @@ let initialized = false
 
 const MAX_PREVIEW_SIZE = 256
 const LUM_DISPLAY_SCALE = 2
-const TILED_MAX = 540
 
 const $ = (id: string) => document.getElementById(id)!
 
@@ -89,13 +88,12 @@ export function init() {
   const originalWrap = $('original-wrap')
   const canvasOriginal = $('canvas-original') as HTMLCanvasElement
   const canvasLuminance = $('canvas-luminance') as HTMLCanvasElement
+  const canvasLuminanceTiled = $('canvas-luminance-tiled') as HTMLCanvasElement
   const canvasHistogram = $('canvas-histogram') as HTMLCanvasElement
-  const canvasTiled = $('canvas-tiled') as HTMLCanvasElement
   const statusEl = $('status')
   const downloadPng = $('download-png') as HTMLButtonElement
   const sectionLuminance = $('section-luminance')
   const section3d = $('section-3d')
-  const tiledSection = $('tiled-section')
   const integrationSection = $('section-integration')
   const integrationCode = $('integration-code').querySelector('code')!
   const threeContainer = $('three-container')
@@ -107,6 +105,7 @@ export function init() {
   let simplifyToken = 0
   let dragCounter = 0
   let baseName = 'tex7'
+  let tiledPreview = false
 
   const simplifyOpts: SimplifyOptions = {
     enabled: false,
@@ -116,8 +115,10 @@ export function init() {
   }
   const seamOpts: SeamOptions = {
     enabled: false,
-    range: 16,
-    amount: 1,
+    rangeX: 16,
+    amountX: 1,
+    rangeY: 16,
+    amountY: 1,
   }
   const shapeOpts: ShapeOptions = {
     clampLow: 0.001,
@@ -162,21 +163,34 @@ export function init() {
     statusEl.textContent = `${loaded.width}×${loaded.height} · simplify ${simplifyMs} ms`
   }
 
-  function drawTiled() {
+  // The shipped texture, drawn as a 2×2 tile to check how its edges wrap. The backing store
+  // is sized to the display footprint × devicePixelRatio (like the histogram) so the tiling
+  // stays crisp on hi-DPI screens; the CSS size matches the single view, so toggling between
+  // them doesn't reflow.
+  function drawShipTiled() {
     if (!loaded) return
     const [dw, dh] = getDisplayDimensions(loaded.width, loaded.height)
-    canvasTiled.width = dw * 3
-    canvasTiled.height = dh * 3
-    // Display capped so it sits beside the sphere without inflating the sticky preview.
-    const displayScale = Math.min(1, TILED_MAX / (dw * 3))
-    canvasTiled.style.width = `${Math.round(dw * 3 * displayScale)}px`
-    canvasTiled.style.height = `${Math.round(dh * 3 * displayScale)}px`
-    const ctx = canvasTiled.getContext('2d')!
-    for (let y = 0; y < 3; y++) {
-      for (let x = 0; x < 3; x++) {
-        ctx.drawImage(canvasLuminance, x * dw, y * dh, dw, dh)
+    const cssW = dw * LUM_DISPLAY_SCALE
+    const cssH = dh * LUM_DISPLAY_SCALE
+    const dpr = Math.min(2, window.devicePixelRatio || 1)
+    canvasLuminanceTiled.width = Math.round(cssW * dpr)
+    canvasLuminanceTiled.height = Math.round(cssH * dpr)
+    canvasLuminanceTiled.style.width = `${cssW}px`
+    canvasLuminanceTiled.style.height = `${cssH}px`
+    const ctx = canvasLuminanceTiled.getContext('2d')!
+    const tw = canvasLuminanceTiled.width / 2
+    const th = canvasLuminanceTiled.height / 2
+    for (let y = 0; y < 2; y++) {
+      for (let x = 0; x < 2; x++) {
+        ctx.drawImage(canvasLuminance, x * tw, y * th, tw, th)
       }
     }
+  }
+
+  // Swap the ship preview between the single texture and its 2×2 tiling.
+  function applyTiledView() {
+    canvasLuminance.classList.toggle('hidden', tiledPreview)
+    canvasLuminanceTiled.classList.toggle('hidden', !tiledPreview)
   }
 
   function renderHistogram() {
@@ -210,7 +224,7 @@ export function init() {
     canvasLuminance.style.width = `${dw * LUM_DISPLAY_SCALE}px`
     canvasLuminance.style.height = `${dh * LUM_DISPLAY_SCALE}px`
     canvasLuminance.getContext('2d')!.putImageData(imageData, 0, 0)
-    drawTiled()
+    drawShipTiled()
     notifyLuminanceUpdated()
     renderHistogram()
   }
@@ -362,18 +376,34 @@ material.normalNode = tU.mul(inv.mul(dHdu).negate()).add(tV.mul(inv.mul(dHdv).ne
       },
     },
     {
-      id: 'seam-range',
+      id: 'seam-range-x',
       format: v => `${v} px`,
       apply: v => {
-        seamOpts.range = v
+        seamOpts.rangeX = v
         scheduleSimplify()
       },
     },
     {
-      id: 'seam-amount',
+      id: 'seam-amount-x',
       format: v => `${v}%`,
       apply: v => {
-        seamOpts.amount = v / 100
+        seamOpts.amountX = v / 100
+        scheduleSimplify()
+      },
+    },
+    {
+      id: 'seam-range-y',
+      format: v => `${v} px`,
+      apply: v => {
+        seamOpts.rangeY = v
+        scheduleSimplify()
+      },
+    },
+    {
+      id: 'seam-amount-y',
+      format: v => `${v}%`,
+      apply: v => {
+        seamOpts.amountY = v / 100
         scheduleSimplify()
       },
     },
@@ -453,6 +483,14 @@ material.normalNode = tU.mul(inv.mul(dHdu).negate()).add(tV.mul(inv.mul(dHdv).ne
       apply: on => {
         seamOpts.enabled = on
         scheduleSimplify()
+      },
+    },
+    {
+      id: 'btn-tiled-toggle',
+      key: 'tiled-preview',
+      apply: on => {
+        tiledPreview = on
+        applyTiledView()
       },
     },
   ]
@@ -617,7 +655,6 @@ material.normalNode = tU.mul(inv.mul(dHdu).negate()).add(tV.mul(inv.mul(dHdv).ne
 
       sectionLuminance.classList.remove('hidden')
       section3d.classList.remove('hidden')
-      tiledSection.classList.remove('hidden')
       integrationSection.classList.remove('hidden')
       updateDropZoneVisibility()
       void initThreeScene(threeContainer, canvasLuminance)

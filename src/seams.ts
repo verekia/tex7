@@ -7,7 +7,7 @@
 //
 // Fix: range-limited gradient-domain (DC) correction. Per row the wrap mismatch
 // j = L(0) - L(W-1) is split in half and spread back into each edge with a smooth
-// falloff over `range` px (smoothstep, flat at both ends so the corrected band
+// falloff over that axis's range (smoothstep, flat at both ends so the corrected band
 // merges into the untouched interior with no new crease). Each side moves half the
 // gap so they meet in the middle — minimal, symmetric distortion. Then the same
 // over top/bottom. With amount = 1 the passes are separable-exact: fixing columns
@@ -22,20 +22,23 @@
 export interface SeamOptions {
   /** Master on/off — when false the input passes through untouched. */
   enabled: boolean
-  /** Falloff distance in px the edge correction reaches into the texture. */
-  range: number
-  /** 0..1 — fraction of the edge mismatch to close (1 = opposite edges meet exactly). */
-  amount: number
+  /** X (left ↔ right) falloff distance in px the correction reaches inward. */
+  rangeX: number
+  /** X (left ↔ right) 0..1 fraction of the edge mismatch to close (1 = exact). */
+  amountX: number
+  /** Y (top ↔ bottom) falloff distance in px the correction reaches inward. */
+  rangeY: number
+  /** Y (top ↔ bottom) 0..1 fraction of the edge mismatch to close (1 = exact). */
+  amountY: number
 }
 
 export function fixSeams(src: Float32Array, width: number, height: number, opts: SeamOptions): Float32Array {
-  const { enabled, range, amount } = opts
+  const { enabled, rangeX, amountX, rangeY, amountY } = opts
   const out = src.slice()
-  if (!enabled || amount <= 0 || range < 1) return out
+  if (!enabled) return out
 
-  const r = Math.max(1, Math.round(range))
-  fixHorizontalSeam(out, width, height, r, amount)
-  fixVerticalSeam(out, width, height, r, amount)
+  if (amountX > 0 && rangeX >= 1) fixHorizontalSeam(out, width, height, Math.max(1, Math.round(rangeX)), amountX)
+  if (amountY > 0 && rangeY >= 1) fixVerticalSeam(out, width, height, Math.max(1, Math.round(rangeY)), amountY)
   return out
 }
 
