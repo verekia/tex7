@@ -205,6 +205,41 @@ export const MainView = () => {
                 title="Filter iterations. More passes flatten low-variation areas toward clean, uniform zones."
               />
             </div>
+
+            <div className="control-group">
+              <div className="control-group-head">
+                <span className="control-group-title">Seams</span>
+                <button
+                  id="btn-seams-toggle"
+                  className="group-toggle"
+                  type="button"
+                  aria-pressed="false"
+                  title="Repair tile seams: blend the left edge into the right and the top into the bottom so the texture wraps seamlessly. Runs after Simplify."
+                >
+                  Off
+                </button>
+              </div>
+              <Slider
+                id="seam-range"
+                label="Range"
+                min={1}
+                max={128}
+                step={1}
+                defaultValue={16}
+                display="16 px"
+                title="How far the edge correction reaches into the texture, in pixels. Small ranges fix fine grain; larger ranges connect bigger shapes across the seam."
+              />
+              <Slider
+                id="seam-amount"
+                label="Amount"
+                min={0}
+                max={100}
+                step={1}
+                defaultValue={100}
+                display="100%"
+                title="How much of the edge mismatch to close. 100% makes opposite edges meet exactly; lower values correct partially for a subtler touch."
+              />
+            </div>
           </div>
 
           <div className="stage-preview">

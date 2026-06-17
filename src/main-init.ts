@@ -8,6 +8,7 @@ import {
   type LoadedTexture,
   type ShapeOptions,
 } from './process'
+import { fixSeams, type SeamOptions } from './seams'
 import { simplifyLuminance, type SimplifyOptions } from './simplify'
 import {
   initThreeScene,
@@ -113,6 +114,11 @@ export function init() {
     radius: 4,
     passes: 3,
   }
+  const seamOpts: SeamOptions = {
+    enabled: false,
+    range: 16,
+    amount: 1,
+  }
   const shapeOpts: ShapeOptions = {
     clampLow: 0.001,
     clampHigh: 0.001,
@@ -217,7 +223,9 @@ export function init() {
     await new Promise(resolve => setTimeout(resolve, 0))
     if (token !== simplifyToken || !loaded) return
     const t0 = performance.now()
-    simplified = simplifyLuminance(loaded.baseMap, loaded.width, loaded.height, simplifyOpts)
+    let map = simplifyLuminance(loaded.baseMap, loaded.width, loaded.height, simplifyOpts)
+    if (seamOpts.enabled) map = fixSeams(map, loaded.width, loaded.height, seamOpts)
+    simplified = map
     simplifyMs = Math.round(performance.now() - t0)
     updateStatus()
     runShape()
@@ -354,6 +362,22 @@ material.normalNode = tU.mul(inv.mul(dHdu).negate()).add(tV.mul(inv.mul(dHdv).ne
       },
     },
     {
+      id: 'seam-range',
+      format: v => `${v} px`,
+      apply: v => {
+        seamOpts.range = v
+        scheduleSimplify()
+      },
+    },
+    {
+      id: 'seam-amount',
+      format: v => `${v}%`,
+      apply: v => {
+        seamOpts.amount = v / 100
+        scheduleSimplify()
+      },
+    },
+    {
       id: 'shape-gamma',
       format: v => v.toFixed(2),
       apply: v => {
@@ -420,6 +444,14 @@ material.normalNode = tU.mul(inv.mul(dHdu).negate()).add(tV.mul(inv.mul(dHdv).ne
       key: 'simplify-enabled',
       apply: on => {
         simplifyOpts.enabled = on
+        scheduleSimplify()
+      },
+    },
+    {
+      id: 'btn-seams-toggle',
+      key: 'seams-enabled',
+      apply: on => {
+        seamOpts.enabled = on
         scheduleSimplify()
       },
     },
