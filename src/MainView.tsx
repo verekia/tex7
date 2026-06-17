@@ -360,7 +360,18 @@ export const MainView = () => {
             </div>
 
             <div className="control-group">
-              <span className="control-group-title">Surface</span>
+              <div className="control-group-head">
+                <span className="control-group-title">Surface</span>
+                <button
+                  id="btn-bump-toggle"
+                  className="group-toggle"
+                  type="button"
+                  aria-pressed="true"
+                  title="Toggle the bump in the sphere preview. Off flat-shades the bands. Preview only — the exported TSL always includes the bump."
+                >
+                  On
+                </button>
+              </div>
               <Slider
                 id="bump-scale"
                 label="Bump scale"

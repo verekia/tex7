@@ -13,6 +13,7 @@ import { simplifyLuminance, type SimplifyOptions } from './simplify'
 import {
   initThreeScene,
   notifyLuminanceUpdated,
+  setBumpEnabled,
   setBumpOffset,
   setBumpScale,
   setBumpStencil,
@@ -492,6 +493,11 @@ material.normalNode = tU.mul(inv.mul(dHdu).negate()).add(tV.mul(inv.mul(dHdv).ne
         tiledPreview = on
         applyTiledView()
       },
+    },
+    {
+      id: 'btn-bump-toggle',
+      key: 'bump-enabled',
+      apply: setBumpEnabled,
     },
   ]
 

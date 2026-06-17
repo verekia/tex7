@@ -61,6 +61,9 @@ const uLightPivot = uniform(0.66)
 const uCrossfade = uniform(0.15)
 const uBumpScale = uniform(0.02)
 const uBumpOffset = uniform(0.005)
+// Preview-only bump on/off (0 or 1). Multiplied into the slope so "off" flattens the
+// surface to its geometry normal. Never part of the exported TSL.
+const uBumpEnabled = uniform(1)
 
 // Valve-style wrap lighting: softens the terminator so diffuse wraps slightly past 90°,
 // for a softer look than stock Lambert.
@@ -152,7 +155,10 @@ function buildNormalNode(tex: CanvasTexture) {
     return [tr.add(br).sub(tl).sub(bl).mul(gain), tl.add(tr).sub(bl).sub(br).mul(gain)] as const
   }
 
-  const [slopeU, slopeV] = bumpStencil === '4' ? diag4() : sobel8()
+  const [rawSlopeU, rawSlopeV] = bumpStencil === '4' ? diag4() : sobel8()
+  // Bump on/off is a live uniform factor, so toggling never recompiles the shader.
+  const slopeU = rawSlopeU.mul(uBumpEnabled)
+  const slopeV = rawSlopeV.mul(uBumpEnabled)
 
   const dp1 = positionView.dFdx()
   const dp2 = positionView.dFdy()
@@ -306,6 +312,10 @@ export function setBumpStencil(stencil: BumpStencil) {
   materials.lambert.normalNode = normalNode
   materials.standard.needsUpdate = true
   materials.lambert.needsUpdate = true
+}
+
+export function setBumpEnabled(on: boolean) {
+  uBumpEnabled.value = on ? 1 : 0
 }
 
 export function setDirectionalIntensity(v: number) {
